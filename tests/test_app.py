@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path[:0] = [str(ROOT), str(ROOT / "demo")]
 
 from mathexaminer import db, deepseek  # noqa: E402
-from mathexaminer.ui import auth_page  # noqa: E402
+from mathexaminer.ui import auth_page, components  # noqa: E402
 
 APP = str(ROOT / "app.py")
 DEMO = str(ROOT / "demo" / "demo_app.py")
@@ -21,7 +21,7 @@ DEMO = str(ROOT / "demo" / "demo_app.py")
 @pytest.fixture
 def backend():
     saved = {n: getattr(db, n) for n in dir(db) if callable(getattr(db, n))}
-    saved_grade, saved_render = deepseek.grade, auth_page.render
+    saved_grade, saved_render, saved_banner = deepseek.grade, auth_page.render, components.welcome_banner
     import fake_backend
 
     fake_backend = importlib.reload(fake_backend)
@@ -29,11 +29,12 @@ def backend():
     yield fake_backend
     for name, fn in saved.items():
         setattr(db, name, fn)
-    deepseek.grade, auth_page.render = saved_grade, saved_render
+    deepseek.grade, auth_page.render, components.welcome_banner = saved_grade, saved_render, saved_banner
 
 
 def demo_app(backend, profile=None, **state):
     at = AppTest.from_file(DEMO, default_timeout=30)
+    at.session_state["demo_store"] = backend.STORE  # share the test's store with the app session
     if profile is not None:
         at.session_state["profile"] = profile
     for key, value in state.items():
@@ -155,3 +156,14 @@ def test_user_supplied_titles_cannot_inject_html(backend):
         at = demo_app(backend, profile)
         assert not at.exception
         assert "<img src=x" not in all_markdown(at)
+
+
+def test_demo_sessions_are_isolated_and_labelled(backend):
+    at = demo_app(backend, backend.STUDENTS["student-1"])
+    assert not at.exception
+    assert any(backend.DEMO_NOTE in i.value for i in at.info)
+    fresh = AppTest.from_file(DEMO, default_timeout=30)  # a second visitor, no shared store
+    fresh.session_state["profile"] = backend.TEACHER
+    fresh.run()
+    assert not fresh.exception
+    assert fresh.session_state["demo_store"] is not backend.STORE

@@ -15,11 +15,12 @@ from datetime import datetime, timedelta, timezone
 
 import streamlit as st
 from PIL import Image, ImageDraw
+from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from mathexaminer import db, deepseek
 from mathexaminer.db import DBError, Profile
 from mathexaminer.models import GradingResult
-from mathexaminer.ui import auth_page
+from mathexaminer.ui import auth_page, components
 
 TEACHER = Profile("teacher-1", "teacher@demo.school", "Ms Carter", "teacher")
 STUDENTS = {
@@ -93,7 +94,29 @@ class _Store:
         }
 
 
-STORE = _Store()
+STORE = _Store()  # used outside a Streamlit session, e.g. by tests calling these functions directly
+
+
+def _store() -> _Store:
+    """Each browser session gets its own copy, so visitors to a public demo never see each other's changes."""
+    if get_script_run_ctx() is None:
+        return STORE
+    if "demo_store" not in st.session_state:
+        st.session_state.demo_store = _Store()
+    return st.session_state.demo_store
+
+
+DEMO_NOTE = (
+    "Demo mode: sample data, private to your browser tab. Grading returns a fixed example marking, "
+    "not a real AI call. Sign out to reset."
+)
+_real_welcome_banner = components.welcome_banner
+
+
+def _welcome_banner_with_note(name, email, role):
+    _real_welcome_banner(name, email, role)
+    st.info(DEMO_NOTE)
+
 _real_auth_render = auth_page.render
 
 
@@ -151,95 +174,95 @@ def sign_out(client):
 
 
 def download(client, bucket, path):
-    return STORE.files[path]
+    return _store().files[path]
 
 
 def create_assignment(client, teacher_id, title, filename, data, mime):
     path = f"{teacher_id}/{uuid.uuid4()}.bin"
-    STORE.files[path] = data
-    STORE.assignments.insert(
+    _store().files[path] = data
+    _store().assignments.insert(
         0, {"id": str(uuid.uuid4()), "teacher_id": teacher_id, "title": title, "status": "active",
             "mark_scheme_path": path, "created_at": _iso(_now())}
     )
 
 
 def list_teacher_assignments(client, teacher_id):
-    return [dict(a) for a in STORE.assignments if a["teacher_id"] == teacher_id]
+    return [dict(a) for a in _store().assignments if a["teacher_id"] == teacher_id]
 
 
 def set_assignment_status(client, assignment_id, status):
-    for a in STORE.assignments:
+    for a in _store().assignments:
         if a["id"] == assignment_id:
             a["status"] = status
 
 
 def replace_mark_scheme(client, teacher_id, assignment_id, old_path, filename, data, mime):
     path = f"{teacher_id}/{uuid.uuid4()}.bin"
-    STORE.files[path] = data
-    for a in STORE.assignments:
+    _store().files[path] = data
+    for a in _store().assignments:
         if a["id"] == assignment_id:
             a["mark_scheme_path"] = path
 
 
 def delete_assignment(client, assignment_id, mark_scheme_path):
-    STORE.assignments = [a for a in STORE.assignments if a["id"] != assignment_id]
-    STORE.submissions = [s for s in STORE.submissions if s["assignment_id"] != assignment_id]
+    _store().assignments = [a for a in _store().assignments if a["id"] != assignment_id]
+    _store().submissions = [s for s in _store().submissions if s["assignment_id"] != assignment_id]
 
 
 def list_teacher_submissions(client, assignment_ids):
-    return [dict(s) for s in STORE.submissions if s["assignment_id"] in assignment_ids]
+    return [dict(s) for s in _store().submissions if s["assignment_id"] in assignment_ids]
 
 
 def resolve_submission(client, submission_id, score, comment):
-    for s in STORE.submissions:
+    for s in _store().submissions:
         if s["id"] == submission_id:
             s.update(teacher_score_awarded=score, teacher_comment=comment.strip() or None,
                      resolved_at=_iso(_now()), resolved_by=TEACHER.user_id)
 
 
 def list_open_assignments(client):
-    return [dict(a) for a in STORE.assignments if a["status"] == "active"]
+    return [dict(a) for a in _store().assignments if a["status"] == "active"]
 
 
 def count_gradings_today(client, student_id):
     since = _iso(_now() - timedelta(days=1))
-    return sum(1 for s in STORE.submissions if s["student_id"] == student_id and s["created_at"] >= since)
+    return sum(1 for s in _store().submissions if s["student_id"] == student_id and s["created_at"] >= since)
 
 
 def upload_student_work(client, student_id, files):
     paths = []
     for _name, data, _mime in files:
         path = f"{student_id}/{uuid.uuid4()}.jpg"
-        STORE.files[path] = data
+        _store().files[path] = data
         paths.append(path)
     return paths
 
 
 def save_submission(client, assignment_id, student_id, paths, result):
-    assignment = next(a for a in STORE.assignments if a["id"] == assignment_id)
+    assignment = next(a for a in _store().assignments if a["id"] == assignment_id)
     student = STUDENTS[student_id]
-    row = STORE._row(assignment, student, result.score_awarded, result.score_total, result.confidence,
+    row = _store()._row(assignment, student, result.score_awarded, result.score_total, result.confidence,
                      result.topic, False, "student", "", _now())
     row.update(student_work_paths=paths, ai_feedback=result.to_markdown(), key_takeaway=result.key_takeaway)
-    STORE.submissions.insert(0, row)
+    _store().submissions.insert(0, row)
     return row["id"]
 
 
 def flag_submission(client, submission_id, reason):
-    for s in STORE.submissions:
+    for s in _store().submissions:
         if s["id"] == submission_id:
             s.update(flagged_for_review=True, flag_source="student",
                      flag_reason=reason.strip() or "Student requested manual review.", flagged_at=_iso(_now()))
 
 
 def auto_flag_submission(client, submission_id, reason):
-    for s in STORE.submissions:
+    for s in _store().submissions:
         if s["id"] == submission_id and not s["flagged_for_review"]:
             s.update(flagged_for_review=True, flag_source="ai", flag_reason=reason, flagged_at=_iso(_now()))
 
 
 def list_student_submissions(client, student_id):
-    return [dict(s) for s in STORE.submissions if s["student_id"] == student_id]
+    return [dict(s) for s in _store().submissions if s["student_id"] == student_id]
 
 
 DB_FUNCTIONS = (
@@ -257,3 +280,4 @@ def install() -> None:
         setattr(db, name, module[name])
     deepseek.grade = fake_grade
     auth_page.render = _auth_render_with_hint
+    components.welcome_banner = _welcome_banner_with_note
