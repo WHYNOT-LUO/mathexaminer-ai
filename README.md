@@ -3,6 +3,7 @@
 [![CI](https://github.com/WHYNOT-LUO/mathexaminer-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/WHYNOT-LUO/mathexaminer-ai/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
+[![Open the live demo](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://mathexaminer-ai-demo.streamlit.app)
 
 AI-assisted marking of handwritten **CIE A-Level Mathematics** homework, with a human in the loop.
 
@@ -12,10 +13,12 @@ examiner-style feedback in seconds: mark-by-mark (M1 / A1 / B1) with reasons, a 
 student disagrees, the submission goes to a **teacher review queue** where the teacher can confirm or
 override the mark.
 
-> **Try it in 30 seconds, no accounts or API keys needed:**
+> **Try it now: [mathexaminer-ai-demo.streamlit.app](https://mathexaminer-ai-demo.streamlit.app)**
+> Log in as `student@demo.school` or `teacher@demo.school` with any password. No sign-up or keys needed.
+> The demo runs the real UI against an in-memory backend with a canned marking; each visitor gets their own copy.
+>
+> Or run the same demo locally:
 > `python3 -m pip install -r requirements.txt && python3 -m streamlit run demo/demo_app.py`
-> then log in as `student@demo.school` or `teacher@demo.school` (any password).
-> The demo runs the real UI against an in-memory backend with a canned marking.
 
 ## Screenshots
 
