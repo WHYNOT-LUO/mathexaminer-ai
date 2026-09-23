@@ -13,7 +13,7 @@ student disagrees, the submission goes to a **teacher review queue** where the t
 override the mark.
 
 > **Try it in 30 seconds, no accounts or API keys needed:**
-> `pip install -r requirements.txt && streamlit run demo/demo_app.py`
+> `python3 -m pip install -r requirements.txt && python3 -m streamlit run demo/demo_app.py`
 > then log in as `student@demo.school` or `teacher@demo.school` (any password).
 > The demo runs the real UI against an in-memory backend with a canned marking.
 
@@ -92,7 +92,7 @@ small relay in [`docs/cloudflare-worker.js`](docs/cloudflare-worker.js) and set 
 
 ```bash
 git clone https://github.com/WHYNOT-LUO/mathexaminer-ai.git && cd mathexaminer-ai
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .streamlit/secrets.toml.example .streamlit/secrets.toml   # then fill in your values
 streamlit run app.py
