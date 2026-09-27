@@ -1,5 +1,6 @@
 """UI smoke tests: run the real Streamlit app against the in-memory demo backend."""
 
+import dataclasses
 import importlib
 import inspect
 import sys
@@ -110,6 +111,33 @@ def test_student_error_book_and_result_view(backend):
     text = all_markdown(at)
     assert "4 / 5 marks" in text
     assert "Substitute the lower limit" in text
+
+
+def test_key_takeaway_renders_math_and_stays_escaped(backend):
+    # Streamlit only renders $...$ in plain markdown, so the takeaway must not sit inside raw HTML
+    takeaway = "Solve the system for $M$. <img src=x onerror=alert(1)>"
+    result = dataclasses.replace(backend.fake_grade(None, [], []), key_takeaway=takeaway)
+    student = backend.STUDENTS["student-1"]
+    sid = backend.save_submission(None, backend.STORE.assignments[0]["id"], student.user_id, [], result)
+    last = {"submission_id": sid, "assignment_title": "Integration Test 1", "result": result,
+            "flagged": False, "auto_flagged": False}
+    at = demo_app(backend, student, last_result=last)
+    assert not at.exception
+    assert any(m.value == takeaway and not m.proto.allow_html for m in at.markdown)
+    assert not any("<img src=x" in m.value for m in at.markdown if m.proto.allow_html)
+
+
+def test_error_book_takeaways_render_math_and_stay_escaped(backend):
+    takeaway = "Re-check $F(1)$ before subtracting. <img src=x onerror=alert(1)>"
+    student = backend.STUDENTS["student-1"]
+    mine = [s for s in backend.STORE.submissions if s["student_id"] == student.user_id]
+    assert len(mine) > 1  # several Error Book entries, so the container keys must be unique
+    for row in mine:
+        row["key_takeaway"] = takeaway
+    at = demo_app(backend, student)
+    assert not at.exception
+    assert sum(m.value == takeaway and not m.proto.allow_html for m in at.markdown) == len(mine)
+    assert not any("<img src=x" in m.value for m in at.markdown if m.proto.allow_html)
 
 
 def test_student_can_dispute_a_grade(backend):

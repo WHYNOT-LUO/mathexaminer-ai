@@ -111,11 +111,16 @@ def result_cards(awarded: int, total: int, topic: str, confidence: int, takeaway
         unsafe_allow_html=True,
     )
     if takeaway:
-        st.markdown(
-            f"""<div class="takeaway-box"><span class="takeaway-label">📌 Key takeaway</span>
-            <p class="takeaway-text">{esc(takeaway)}</p></div>""",
-            unsafe_allow_html=True,
-        )
+        takeaway_box(takeaway)
+
+
+def takeaway_box(text: str, key: str = "takeaway") -> None:
+    """The yellow 'Key takeaway' box. The keyed container carries the styling (.st-key-takeaway*);
+    the text goes through plain markdown so $...$ maths renders (Streamlit ignores it inside raw
+    HTML) and any HTML in model output stays escaped. `key` must be unique on the page."""
+    with st.container(key=key):
+        st.markdown('<span class="takeaway-label">📌 Key takeaway</span>', unsafe_allow_html=True)
+        st.markdown(text)
 
 
 def override_note(row: dict) -> None:

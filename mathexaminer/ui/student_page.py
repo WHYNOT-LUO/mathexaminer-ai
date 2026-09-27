@@ -12,12 +12,12 @@ from ..models import effective_score
 from .components import (
     alert,
     empty_state,
-    esc,
     format_date,
     override_note,
     page_header,
     result_cards,
     section_label,
+    takeaway_box,
 )
 
 WORK_TYPES = ["png", "jpg", "jpeg", "webp", "pdf"]
@@ -196,10 +196,6 @@ def _error_book_tab(client, profile) -> None:
         awarded, total = effective_score(r)
         with st.expander(f"{r['assignment_title']} · {awarded}/{total} · {r['topic_tag']} · {format_date(r['created_at'])}"):
             if r["key_takeaway"]:
-                st.markdown(
-                    f'<div class="takeaway-box"><span class="takeaway-label">📌 Key takeaway</span>'
-                    f'<p class="takeaway-text">{esc(r["key_takeaway"])}</p></div>',
-                    unsafe_allow_html=True,
-                )
+                takeaway_box(r["key_takeaway"], key=f"takeaway_{r['id']}")
             override_note(r)
             st.markdown(r["ai_feedback"])
