@@ -229,6 +229,7 @@ div[data-baseweb="input"] input:focus {
     font-family:'Playfair Display',serif;
     font-size:2rem; font-weight:700; color:var(--ink);
     margin:0; letter-spacing:-0.4px; line-height:1.15;
+    text-wrap:balance;  /* if a narrow screen does wrap it, split evenly rather than orphan "AI" */
 }
 .auth-header .tagline { color:var(--muted); font-size:0.88rem; margin-top:0.35rem; font-weight:400; }
 

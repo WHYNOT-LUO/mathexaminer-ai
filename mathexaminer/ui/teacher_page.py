@@ -178,7 +178,7 @@ def _review_card(client, s: dict) -> None:
         for path in s["student_work_paths"]:
             try:
                 for page in images.to_jpeg_pages(db.download(client, BUCKET_SUBMISSIONS, path)):
-                    st.image(page, use_container_width=True)
+                    st.image(page, width="stretch")
             except (db.DBError, images.ImageError) as exc:
                 alert("error", str(exc))
 

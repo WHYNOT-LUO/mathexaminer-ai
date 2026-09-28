@@ -67,7 +67,7 @@ def render(submissions: list[dict]) -> None:
         margin=dict(l=0, r=0, t=10, b=0), height=400, legend_title_text="",
         legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="left", x=0),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     st.markdown("**Average mark by topic**")
     by_topic = df.groupby("Topic", as_index=False).agg(Average=("Percent", "mean"), Submissions=("Percent", "size"))
@@ -75,4 +75,4 @@ def render(submissions: list[dict]) -> None:
                   range_x=[0, 100], color_discrete_sequence=["#1B3A6B"])
     fig2.update_traces(texttemplate="n=%{text}", textposition="inside")
     fig2.update_layout(margin=dict(l=0, r=0, t=10, b=0), height=max(200, 45 * len(by_topic)))
-    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig2, width="stretch")

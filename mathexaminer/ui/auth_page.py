@@ -15,7 +15,7 @@ def render(client) -> None:
     with mid:
         st.markdown(
             """<div class="auth-header"><span class="logo-icon">📐</span>
-            <h1>MathExaminer<br>AI</h1>
+            <h1>MathExaminer AI</h1>
             <p class="tagline">CIE A-Level · Instant · Structured feedback</p></div>""",
             unsafe_allow_html=True,
         )
@@ -27,7 +27,7 @@ def render(client) -> None:
         with login_tab, st.form("login_form"):
             email = st.text_input("Email address", placeholder="you@example.com")
             password = st.text_input("Password", type="password")
-            if st.form_submit_button("Log in →", use_container_width=True):
+            if st.form_submit_button("Log in →", width="stretch"):
                 if not email.strip() or not password:
                     alert("error", "Please enter your email and password.")
                 else:
@@ -48,7 +48,7 @@ def render(client) -> None:
                 type="password",
                 help="Leave blank if you are a student. Teachers get this code from their school admin.",
             )
-            if st.form_submit_button("Create account →", use_container_width=True):
+            if st.form_submit_button("Create account →", width="stretch"):
                 if not (name.strip() and email.strip() and password):
                     alert("error", "Please fill in your name, email and password.")
                 elif len(password) < MIN_PASSWORD_LEN:

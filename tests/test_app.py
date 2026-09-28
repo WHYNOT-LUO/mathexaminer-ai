@@ -67,6 +67,15 @@ def test_login_screen_renders(backend):
     at = demo_app(backend)
     assert not at.exception
     assert [t.label for t in at.tabs] == ["Log in", "Sign up"]
+    assert "<h1>MathExaminer AI</h1>" in all_markdown(at)  # one line, no forced break before "AI"
+
+
+def test_app_code_avoids_deprecated_use_container_width():
+    # Streamlit deprecated use_container_width (removal announced for after 2025-12-31);
+    # requirements.txt allows any newer Streamlit, so a release that drops it would break the app
+    sources = [ROOT / "app.py", *(ROOT / "mathexaminer").rglob("*.py"), *(ROOT / "demo").rglob("*.py")]
+    offenders = [str(p.relative_to(ROOT)) for p in sources if "use_container_width" in p.read_text()]
+    assert offenders == []
 
 
 def test_student_can_log_in_and_sign_out(backend):

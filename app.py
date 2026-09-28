@@ -34,7 +34,7 @@ else:
         welcome_banner(profile.name, profile.email, profile.role)
     with right:
         st.markdown("<br><br>", unsafe_allow_html=True)
-        if st.button("Sign out", use_container_width=True):
+        if st.button("Sign out", width="stretch"):
             db.sign_out(client)
             st.session_state.clear()
             st.rerun()

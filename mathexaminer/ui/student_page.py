@@ -82,7 +82,7 @@ def _submit_tab(client, profile, settings: Settings) -> None:
             return
         cols = st.columns(min(len(pages), 4))
         for col, page in zip(cols, pages, strict=False):
-            col.image(page, use_container_width=True)
+            col.image(page, width="stretch")
 
         if st.button("⚡ Grade my work", disabled=remaining == 0, key="grade_btn"):
             _grade(client, profile, settings, chosen, files, pages)
@@ -186,7 +186,7 @@ def _error_book_tab(client, profile) -> None:
         fig.update_traces(texttemplate="n=%{text}", textposition="inside")
         fig.update_layout(margin=dict(l=0, r=0, t=10, b=0), height=max(180, 42 * len(by_topic)))
         st.caption("Your weakest topics are at the top.")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     topics = sorted({r["topic_tag"] for r in rows})
     picked = st.multiselect("Filter by topic", topics)
