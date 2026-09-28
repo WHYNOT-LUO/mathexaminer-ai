@@ -134,6 +134,7 @@ mathexaminer/
 supabase/schema.sql        Tables, RLS policies, storage policies, SQL functions
 demo/                      In-memory backend so the UI runs with no accounts or keys
 tests/                     pytest suite (unit tests + Streamlit AppTest UI tests)
+.github/workflows/          CI (ruff + pytest) and a 6-hourly visit that keeps the hosted demo awake
 ```
 
 ## Testing

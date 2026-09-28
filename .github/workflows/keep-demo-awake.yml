@@ -1,0 +1,58 @@
+name: Keep demo awake
+
+# Streamlit Community Cloud puts apps to sleep after 12 hours without traffic, and reviewers may
+# open the demo link at any time. This visits it from GitHub's servers every 6 hours.
+on:
+  schedule:
+    - cron: "17 */6 * * *"  # every 6 hours; GitHub may start scheduled runs a little late
+  workflow_dispatch:         # "Run workflow" button for a manual check
+
+permissions:
+  contents: write  # only for the keep-alive commit at the end
+
+concurrency:
+  group: keep-demo-awake
+  cancel-in-progress: false
+
+jobs:
+  visit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install a headless browser
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Visit the demo (wakes it if it is asleep)
+        run: python .github/scripts/wake_demo.py
+
+      - name: Keep the screenshot if the demo did not load
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-failure
+          path: demo-failure.png
+          if-no-files-found: ignore
+
+      # GitHub switches off scheduled workflows in a repository with no commits for 60 days, and
+      # application reviews can take longer. So when the last commit is over 30 days old, add an
+      # empty commit (pushes made with this workflow's token do not trigger other workflows).
+      - name: Keep this schedule enabled
+        if: always() && github.event_name == 'schedule'
+        run: |
+          last=$(git log -1 --format=%ct)
+          if [ $(( $(date +%s) - last )) -gt $(( 30 * 24 * 3600 )) ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit --allow-empty -m "Keep the scheduled demo visit enabled"
+            git push
+          else
+            echo "last commit is recent; nothing to do"
+          fi
