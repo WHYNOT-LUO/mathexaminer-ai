@@ -20,10 +20,12 @@ except ConfigError as exc:
     )
     st.stop()
 
-# One Supabase client per browser session: it carries the signed-in user's JWT.
+# One Supabase client per browser session: it carries the signed-in user's JWT. The service client
+# (server-side only, bypasses row-level security) is used for the few trusted writes in db.py.
 if "sb_client" not in st.session_state:
     st.session_state.sb_client = db.new_client(settings)
-client = st.session_state.sb_client
+    st.session_state.sb_service = db.new_service_client(settings)
+client, service = st.session_state.sb_client, st.session_state.sb_service
 profile = st.session_state.get("profile")
 
 if profile is None:
@@ -40,9 +42,9 @@ else:
             st.rerun()
 
     if profile.role == "teacher":
-        teacher_page.render(client, profile)
+        teacher_page.render(client, service, profile)
     elif profile.role == "student":
-        student_page.render(client, profile, settings)
+        student_page.render(client, service, profile, settings)
     else:
         alert("error", "Your account has an unknown role. Please contact an administrator.")
 

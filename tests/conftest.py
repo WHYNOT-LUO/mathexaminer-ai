@@ -33,6 +33,7 @@ def settings():
     return Settings(
         supabase_url="https://x.supabase.co",
         supabase_key="anon",
+        supabase_service_key="service",
         deepseek_api_key="SECRET-KEY-123",
         deepseek_model="deepseek-flash",
         deepseek_base_url="https://proxy.example.com/deepseek",
@@ -43,7 +44,7 @@ def settings():
 def clean_env(monkeypatch):
     """Tests must not pick up real credentials or overrides from the developer's shell."""
     for name in ("DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DEEPSEEK_MODEL", "MAX_GRADINGS_PER_DAY",
-                 "SUPABASE_URL", "SUPABASE_KEY"):
+                 "SUPABASE_URL", "SUPABASE_KEY", "SUPABASE_SERVICE_KEY"):
         monkeypatch.delenv(name, raising=False)
     # Ignore a developer's real .streamlit/secrets.toml: settings come from the environment only.
     import os

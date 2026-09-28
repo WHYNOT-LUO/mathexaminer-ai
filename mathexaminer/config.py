@@ -35,12 +35,18 @@ def _lookup(name: str) -> str | None:
 class Settings:
     supabase_url: str
     supabase_key: str
+    supabase_service_key: str  # server-side only: never sent to browsers (see db.new_service_client)
     deepseek_api_key: str
     deepseek_model: str = DEFAULT_DEEPSEEK_MODEL
     deepseek_base_url: str = DEFAULT_DEEPSEEK_BASE_URL
     max_gradings_per_day: int = 20
 
     def validate(self) -> Settings:
+        if self.supabase_service_key == self.supabase_key:
+            raise ConfigError(
+                "SUPABASE_SERVICE_KEY must be the service_role key (Supabase > Settings > API), "
+                "not the anon key."
+            )
         if not MODEL_NAME_RE.match(self.deepseek_model):
             raise ConfigError(f"DEEPSEEK_MODEL {self.deepseek_model!r} is not a valid model id.")
         if not self.deepseek_base_url.startswith(("http://", "https://")):
@@ -52,6 +58,7 @@ def load_settings() -> Settings:
     required = {
         "SUPABASE_URL": _lookup("SUPABASE_URL"),
         "SUPABASE_KEY": _lookup("SUPABASE_KEY"),
+        "SUPABASE_SERVICE_KEY": _lookup("SUPABASE_SERVICE_KEY"),
         "DEEPSEEK_API_KEY": _lookup("DEEPSEEK_API_KEY"),
     }
     missing = [k for k, v in required.items() if not v]
@@ -67,6 +74,7 @@ def load_settings() -> Settings:
     return Settings(
         supabase_url=required["SUPABASE_URL"].strip(),
         supabase_key=required["SUPABASE_KEY"].strip(),
+        supabase_service_key=required["SUPABASE_SERVICE_KEY"].strip(),
         deepseek_api_key=required["DEEPSEEK_API_KEY"].strip(),
         deepseek_model=(_lookup("DEEPSEEK_MODEL") or DEFAULT_DEEPSEEK_MODEL).strip(),
         deepseek_base_url=(_lookup("DEEPSEEK_BASE_URL") or DEFAULT_DEEPSEEK_BASE_URL).strip().rstrip("/"),

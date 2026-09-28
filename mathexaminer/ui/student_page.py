@@ -24,23 +24,24 @@ WORK_TYPES = ["png", "jpg", "jpeg", "webp", "pdf"]
 SCHEME_MAX_PAGES = 6
 
 
-def render(client, profile, settings: Settings) -> None:
+def render(client, service, profile, settings: Settings) -> None:
     tab_submit, tab_book = st.tabs(["Submit work", "Error Book"])
     with tab_submit:
-        _submit_tab(client, profile, settings)
+        _submit_tab(client, service, profile, settings)
     with tab_book:
         _error_book_tab(client, profile)
 
 
 @st.cache_data(ttl=900, max_entries=32, show_spinner=False)
-def _scheme_pages(_client, path: str) -> list[bytes]:
-    return images.to_jpeg_pages(db.download(_client, BUCKET_SCHEMES, path), max_pages=SCHEME_MAX_PAGES)
+def _scheme_pages(_service, path: str) -> list[bytes]:
+    # Downloaded with the service client: students cannot read mark schemes themselves.
+    return images.to_jpeg_pages(db.download(_service, BUCKET_SCHEMES, path), max_pages=SCHEME_MAX_PAGES)
 
 
 # ------------------------------------------------------------------ submit
 
 
-def _submit_tab(client, profile, settings: Settings) -> None:
+def _submit_tab(client, service, profile, settings: Settings) -> None:
     page_header("Submit work", "Pick an assignment, upload your handwritten solution, get examiner-style feedback.")
 
     last = st.session_state.get("last_result")
@@ -50,7 +51,7 @@ def _submit_tab(client, profile, settings: Settings) -> None:
 
     try:
         assignments = db.list_open_assignments(client)
-        used_today = db.count_gradings_today(client, profile.user_id)
+        used_today = db.count_gradings_today(service, profile.user_id)
     except db.DBError as exc:
         alert("error", str(exc))
         return
@@ -71,7 +72,7 @@ def _submit_tab(client, profile, settings: Settings) -> None:
         label_visibility="collapsed", key=f"work_{nonce}",
     )
     remaining = max(0, settings.max_gradings_per_day - used_today)
-    st.caption(f"Gradings left today: {remaining} of {settings.max_gradings_per_day}")
+    st.caption(f"Gradings left in the last 24 hours: {remaining} of {settings.max_gradings_per_day}")
 
     if files:
         blobs = [f.getvalue() for f in files]
@@ -85,27 +86,31 @@ def _submit_tab(client, profile, settings: Settings) -> None:
             col.image(page, width="stretch")
 
         if st.button("⚡ Grade my work", disabled=remaining == 0, key="grade_btn"):
-            _grade(client, profile, settings, chosen, files, pages)
+            _grade(client, service, profile, settings, chosen, files, pages)
 
     if err := st.session_state.pop("grade_error", None):
         alert("error", err)
 
 
-def _grade(client, profile, settings: Settings, assignment: dict, files, pages: list[bytes]) -> None:
+def _grade(client, service, profile, settings: Settings, assignment: dict, files, pages: list[bytes]) -> None:
     try:
         with st.spinner("Reading the mark scheme and marking your work - this usually takes under a minute…"):
-            scheme = _scheme_pages(client, assignment["mark_scheme_path"])
+            scheme = _scheme_pages(service, assignment["mark_scheme_path"])
+            # Checked again here, not just when the page drew the button: other tabs may have used it up.
+            db.reserve_grading(service, profile.user_id, settings.max_gradings_per_day)
             result = deepseek.grade(settings, scheme, pages)
             paths = db.upload_student_work(
                 client, profile.user_id, [(f.name, f.getvalue(), f.type) for f in files]
             )
-            submission_id = db.save_submission(client, assignment["id"], profile.user_id, paths, result)
-            auto_flagged = result.confidence < LOW_CONFIDENCE_THRESHOLD
-            if auto_flagged:
-                db.auto_flag_submission(
-                    client, submission_id,
-                    f"AI handwriting confidence {result.confidence}% is below {LOW_CONFIDENCE_THRESHOLD}%.",
-                )
+            flag_reason = (
+                f"AI handwriting confidence {result.confidence}% is below {LOW_CONFIDENCE_THRESHOLD}%."
+                if result.confidence < LOW_CONFIDENCE_THRESHOLD
+                else None
+            )
+            submission_id = db.save_submission(
+                service, assignment["id"], profile.user_id, paths, result, auto_flag_reason=flag_reason
+            )
+            auto_flagged = flag_reason is not None  # saved in the same insert, so this is what the teacher sees
     except (deepseek.GradingError, images.ImageError, db.DBError) as exc:
         st.session_state.grade_error = str(exc)
         st.rerun()

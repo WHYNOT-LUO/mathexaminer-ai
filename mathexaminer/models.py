@@ -26,7 +26,7 @@ class ResultParseError(ValueError):
 def _as_int(value: Any, default: int = 0) -> int:
     try:
         return int(round(float(value)))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):  # OverflowError: inf / 1e999 from the model's JSON
         return default
 
 
@@ -50,6 +50,8 @@ class GradingResult:
     topic: str
     key_takeaway: str
     confidence: int
+
+    MAX_MARKS_PER_ITEM = 20  # one mark-scheme entry never carries more; keeps totals sane and DB-safe
 
     @property
     def score_awarded(self) -> int:
@@ -75,7 +77,7 @@ class GradingResult:
         for raw in raw_marks:
             if not isinstance(raw, dict):
                 continue
-            max_marks = max(0, _as_int(raw.get("max_marks"), 1))
+            max_marks = min(max(0, _as_int(raw.get("max_marks"), 1)), cls.MAX_MARKS_PER_ITEM)
             awarded = min(max(0, _as_int(raw.get("awarded"))), max_marks)
             items.append(
                 MarkItem(
@@ -103,7 +105,9 @@ class GradingResult:
     def to_markdown(self) -> str:
         lines = ["## Step-by-Step Marking", ""]
         for m in self.marks:
-            if m.awarded == m.max_marks:
+            if m.max_marks == 0:
+                icon = "⚪"  # a zero-mark entry: nothing to earn, so neither earned nor lost
+            elif m.awarded == m.max_marks:
                 icon = "✅"
             elif m.awarded == 0:
                 icon = "❌"

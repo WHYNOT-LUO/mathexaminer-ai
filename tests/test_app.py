@@ -61,6 +61,10 @@ def test_fake_backend_matches_real_db_signatures(backend):
 
     for name in backend.DB_FUNCTIONS:
         assert params(getattr(backend, name)) == params(backend.real_db[name]), name
+    # ...and every public db function has a demo version, so the demo never reaches real Supabase
+    public = {n for n, fn in backend.real_db.items()
+              if inspect.isfunction(fn) and fn.__module__ == "mathexaminer.db" and not n.startswith("_")}
+    assert public == set(backend.DB_FUNCTIONS)
 
 
 def test_login_screen_renders(backend):
@@ -204,3 +208,30 @@ def test_demo_sessions_are_isolated_and_labelled(backend):
     fresh.run()
     assert not fresh.exception
     assert fresh.session_state["demo_store"] is not backend.STORE
+
+
+def test_teacher_queue_shows_the_ai_marking_of_pending_items(backend):
+    at = demo_app(backend, backend.TEACHER)
+    assert not at.exception
+    assert "Step-by-Step Marking" in all_markdown(at)  # fetched separately from the lighter list query
+
+
+def test_deleting_an_assignment_removes_its_student_files(backend):
+    target = backend.STORE.assignments[0]
+    work = [p for s in backend.STORE.submissions if s["assignment_id"] == target["id"] for p in s["student_work_paths"]]
+    assert work and all(p in backend.STORE.files for p in work)
+    at = demo_app(backend, backend.TEACHER)
+    at.checkbox(key=f"confirm_del_{target['id']}").check().run()
+    at.button(key=f"del_{target['id']}").click().run()
+    assert not at.exception
+    assert target["id"] not in [a["id"] for a in backend.STORE.assignments]
+    assert not any(p in backend.STORE.files for p in work)
+
+
+def test_allowance_counts_grading_attempts(backend):
+    student = backend.STUDENTS["student-1"]
+    for _ in range(3):
+        backend.reserve_grading(None, student.user_id, cap=20)
+    at = demo_app(backend, student)
+    assert not at.exception
+    assert any("Gradings left in the last 24 hours: 17 of 20" in c.value for c in at.caption)

@@ -10,6 +10,7 @@ sys.path[:0] = [str(ROOT), str(ROOT / "demo")]
 
 os.environ.setdefault("SUPABASE_URL", "https://demo.invalid")
 os.environ.setdefault("SUPABASE_KEY", "demo")
+os.environ.setdefault("SUPABASE_SERVICE_KEY", "demo-service")
 os.environ.setdefault("DEEPSEEK_API_KEY", "demo")
 
 import fake_backend  # noqa: E402

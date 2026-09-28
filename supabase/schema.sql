@@ -1,12 +1,18 @@
 -- MathExaminer AI - Supabase schema, row-level security and storage policies.
 -- Run the whole file once in the Supabase SQL editor. It is idempotent: safe to re-run.
 --
--- Security model in one paragraph: every table has RLS on. Clients (the Streamlit app, using
--- the public anon key + the signed-in user's JWT) can only read what they own. Roles are
--- assigned by a trigger, never by the client. Teachers get the 'teacher' role by presenting a
--- code that exists in `teacher_codes`. Flagging and resolving submissions go through
--- SECURITY DEFINER functions so students cannot edit grades and teachers cannot edit
--- other teachers' submissions.
+-- Security model: every table has RLS on. Clients (the anon key + the signed-in user's JWT)
+-- can only read what they own. Roles are assigned by a trigger, never by the client. Teachers
+-- get the 'teacher' role by presenting a code that exists in `teacher_codes`. Flagging and
+-- resolving submissions go through SECURITY DEFINER functions so students cannot edit grades
+-- and teachers cannot edit other teachers' submissions.
+--
+-- The app server also holds the service_role key (SUPABASE_SERVICE_KEY, never sent to
+-- browsers), which bypasses RLS. Only the server uses it, for what a student must not be able
+-- to do with their own token: create submissions (so a score always comes from the grader),
+-- count and record grading attempts, download a mark scheme to grade against, and delete a
+-- removed assignment's student files. Students therefore have no INSERT policy on
+-- submissions and cannot read mark schemes.
 
 -- ---------------------------------------------------------------- tables
 
@@ -54,6 +60,16 @@ create table if not exists public.submissions (
     resolved_by           uuid references public.users (id),
     created_at            timestamptz not null default now()
 );
+
+-- One row per grading the server starts, successful or not; the 24-hour allowance counts these.
+-- Server-only (service_role): RLS is on with no policies, so clients can neither read nor write it.
+create table if not exists public.grading_attempts (
+    id         uuid primary key default gen_random_uuid(),
+    student_id uuid not null references public.users (id) on delete cascade,
+    created_at timestamptz not null default now()
+);
+create index if not exists grading_attempts_student_created_idx
+    on public.grading_attempts (student_id, created_at desc);
 
 create index if not exists submissions_student_created_idx on public.submissions (student_id, created_at desc);
 create index if not exists submissions_assignment_idx      on public.submissions (assignment_id);
@@ -116,20 +132,8 @@ begin
 end;
 $$;
 
--- The app marks a submission for review when the AI is unsure of the handwriting.
-create or replace function public.auto_flag_submission(p_submission_id uuid, p_reason text)
-returns void
-language plpgsql security definer set search_path = public
-as $$
-begin
-    update public.submissions
-       set flagged_for_review = true,
-           flag_source        = 'ai',
-           flag_reason        = left(coalesce(p_reason, 'Low handwriting confidence.'), 1000),
-           flagged_at         = now()
-     where id = p_submission_id and student_id = auth.uid() and not flagged_for_review;
-end;
-$$;
+-- A low-confidence result is now flagged by the server in the same insert that saves it.
+drop function if exists public.auto_flag_submission(uuid, text);
 
 -- Teacher resolves a flagged submission (keep the AI mark or override it).
 create or replace function public.resolve_submission(p_submission_id uuid, p_score integer, p_comment text)
@@ -159,10 +163,8 @@ end;
 $$;
 
 revoke all on function public.flag_submission(uuid, text)           from public, anon;
-revoke all on function public.auto_flag_submission(uuid, text)      from public, anon;
 revoke all on function public.resolve_submission(uuid, integer, text) from public, anon;
 grant execute on function public.flag_submission(uuid, text)           to authenticated;
-grant execute on function public.auto_flag_submission(uuid, text)      to authenticated;
 grant execute on function public.resolve_submission(uuid, integer, text) to authenticated;
 
 -- ---------------------------------------------------------------- row-level security
@@ -171,6 +173,7 @@ alter table public.users         enable row level security;
 alter table public.teacher_codes enable row level security;   -- no policies: unreadable via API
 alter table public.assignments   enable row level security;
 alter table public.submissions   enable row level security;
+alter table public.grading_attempts enable row level security; -- no policies: server-only
 
 drop policy if exists users_select on public.users;
 create policy users_select on public.users
@@ -206,15 +209,9 @@ create policy submissions_select on public.submissions
                    where a.id = submissions.assignment_id and a.teacher_id = auth.uid())
     );
 
+-- No insert policy: only the server (service_role) creates submissions, so students cannot
+-- store a score of their own choosing. (Older versions of this file had one; drop it.)
 drop policy if exists submissions_insert on public.submissions;
-create policy submissions_insert on public.submissions
-    for insert to authenticated
-    with check (
-        student_id = auth.uid()
-        and not public.is_teacher()
-        and exists (select 1 from public.assignments a
-                    where a.id = submissions.assignment_id and a.status = 'active')
-    );
 -- No update/delete policy on submissions: changes go through the functions above.
 
 -- ---------------------------------------------------------------- storage
@@ -223,11 +220,13 @@ insert into storage.buckets (id, name, public)
 values ('markschemes', 'markschemes', false), ('submissions', 'submissions', false)
 on conflict (id) do update set public = false;
 
--- Mark schemes: files live under "<teacher_id>/<uuid>.<ext>". Any signed-in user may read
--- (the app downloads them server-side to grade); only their owning teacher may write.
+-- Mark schemes: files live under "<teacher_id>/<uuid>.<ext>". Only their owning teacher may read
+-- or write them; the server downloads them with the service_role key to grade, so students
+-- never get access to the answers.
 drop policy if exists markschemes_read on storage.objects;
 create policy markschemes_read on storage.objects
-    for select to authenticated using (bucket_id = 'markschemes');
+    for select to authenticated
+    using (bucket_id = 'markschemes' and (storage.foldername(name))[1] = auth.uid()::text);
 
 drop policy if exists markschemes_write on storage.objects;
 create policy markschemes_write on storage.objects

@@ -1,7 +1,15 @@
-"""Supabase access: auth, database and storage. One client per browser session.
+"""Supabase access: auth, database and storage.
 
-The client holds the signed-in user's JWT in memory, so it must never be shared between
-sessions (do not wrap it in ``st.cache_resource``).
+Two kinds of client:
+
+* ``new_client`` - one per browser session, anon key + the signed-in user's JWT, so row-level
+  security applies. It holds that JWT in memory, so it must never be shared between sessions
+  (do not wrap it in ``st.cache_resource``).
+* ``new_service_client`` - the service_role key, which bypasses row-level security. It lives only
+  on the server and is used for the few writes a student must not be able to forge or read
+  directly: saving a graded submission, the daily grading allowance, downloading a mark scheme to
+  grade against, and removing a deleted assignment's student files. Its callers pass ids taken
+  from the signed-in profile, never from user input.
 """
 
 from __future__ import annotations
@@ -30,6 +38,10 @@ class Profile:
 
 def new_client(settings: Settings) -> Client:
     return create_client(settings.supabase_url, settings.supabase_key)
+
+
+def new_service_client(settings: Settings) -> Client:
+    return create_client(settings.supabase_url, settings.supabase_service_key)
 
 
 # ------------------------------------------------------------------ auth
@@ -166,22 +178,43 @@ def replace_mark_scheme(
     _remove(client, BUCKET_SCHEMES, [old_path])
 
 
-def delete_assignment(client: Client, assignment_id: str, mark_scheme_path: str) -> None:
+def delete_assignment(client: Client, service: Client, assignment_id: str, mark_scheme_path: str) -> None:
+    """Delete an assignment, its submissions (FK cascade) and every stored file they point to.
+
+    The student work paths are read with the teacher's own client, so row-level security limits
+    them to this teacher's assignment; the service client removes them, because storage policies
+    only let each student delete their own files.
+    """
     try:
+        rows = (
+            client.table("submissions").select("student_work_paths").eq("assignment_id", assignment_id).execute().data
+            or []
+        )
         client.table("assignments").delete().eq("id", assignment_id).execute()
     except Exception as exc:
         raise DBError("Could not delete the assignment.") from exc
     _remove(client, BUCKET_SCHEMES, [mark_scheme_path])
+    _remove(service, BUCKET_SUBMISSIONS, [p for r in rows for p in (r.get("student_work_paths") or [])])
+
+
+TEACHER_LIST_COLUMNS = (
+    "id, assignment_id, student_id, student_work_paths, confidence_score, score_awarded, score_total, "
+    "topic_tag, flagged_for_review, flag_source, flag_reason, flagged_at, teacher_score_awarded, "
+    "teacher_comment, resolved_at, created_at"
+)
 
 
 def list_teacher_submissions(client: Client, assignment_ids: list[str]) -> list[dict]:
-    """All submissions for the given assignments, with student and assignment names attached."""
+    """All submissions for the given assignments, with student and assignment names attached.
+
+    Leaves out the long AI feedback text; fetch it for the rows on screen with submission_feedback.
+    """
     if not assignment_ids:
         return []
     try:
         rows = (
             client.table("submissions")
-            .select("*, assignments(title), users:student_id(name)")
+            .select(f"{TEACHER_LIST_COLUMNS}, assignments(title), users:student_id(name)")
             .in_("assignment_id", assignment_ids)
             .order("created_at", desc=True)
             .execute()
@@ -194,6 +227,17 @@ def list_teacher_submissions(client: Client, assignment_ids: list[str]) -> list[
         row["assignment_title"] = (row.pop("assignments", None) or {}).get("title", "")
         row["student_name"] = (row.pop("users", None) or {}).get("name", "Unknown")
     return rows
+
+
+def submission_feedback(client: Client, submission_ids: list[str]) -> dict[str, str]:
+    """The AI feedback markdown for the given submissions, keyed by id."""
+    if not submission_ids:
+        return {}
+    try:
+        rows = client.table("submissions").select("id, ai_feedback").in_("id", submission_ids).execute().data or []
+    except Exception as exc:
+        raise DBError("Could not load the marking for these submissions.") from exc
+    return {r["id"]: r["ai_feedback"] for r in rows}
 
 
 def resolve_submission(client: Client, submission_id: str, score: int | None, comment: str) -> None:
@@ -224,11 +268,12 @@ def list_open_assignments(client: Client) -> list[dict]:
         raise DBError("Could not load assignments.") from exc
 
 
-def count_gradings_today(client: Client, student_id: str) -> int:
+def count_gradings_today(service: Client, student_id: str) -> int:
+    """Grading attempts in the last 24 hours, failed ones included (each one may have cost an API call)."""
     since = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
     try:
         resp = (
-            client.table("submissions")
+            service.table("grading_attempts")
             .select("id", count="exact")
             .eq("student_id", student_id)
             .gte("created_at", since)
@@ -237,6 +282,24 @@ def count_gradings_today(client: Client, student_id: str) -> int:
         return resp.count or 0
     except Exception as exc:
         raise DBError("Could not check your daily grading allowance.") from exc
+
+
+def reserve_grading(service: Client, student_id: str, cap: int) -> None:
+    """Take one grading from the student's 24-hour allowance, or raise DBError if none is left.
+
+    Records the attempt first and counts afterwards, so two tabs grading at the same moment both
+    see each other; the one that pushed the count over the cap gives its attempt back.
+    """
+    try:
+        attempt = service.table("grading_attempts").insert({"student_id": student_id}).execute().data[0]
+    except Exception as exc:
+        raise DBError("Could not check your daily grading allowance.") from exc
+    if count_gradings_today(service, student_id) > cap:
+        try:
+            service.table("grading_attempts").delete().eq("id", attempt["id"]).execute()
+        except Exception:
+            pass  # at worst the student loses one grading from the allowance
+        raise DBError(f"You have used all {cap} gradings for the last 24 hours. Please try again later.")
 
 
 def upload_student_work(client: Client, student_id: str, files: list[tuple[str, bytes, str]]) -> list[str]:
@@ -251,8 +314,11 @@ def upload_student_work(client: Client, student_id: str, files: list[tuple[str, 
 
 
 def save_submission(
-    client: Client, assignment_id: str, student_id: str, paths: list[str], result: Any
+    service: Client, assignment_id: str, student_id: str, paths: list[str], result: Any,
+    auto_flag_reason: str | None = None,
 ) -> str:
+    """Store a graded submission. Only the server can insert (students have no INSERT policy), so the
+    score always comes from the grader. A low-confidence result is flagged in the same insert."""
     row = {
         "assignment_id": assignment_id,
         "student_id": student_id,
@@ -264,11 +330,24 @@ def save_submission(
         "topic_tag": result.topic,
         "key_takeaway": result.key_takeaway,
     }
+    if auto_flag_reason:
+        row.update(
+            flagged_for_review=True, flag_source="ai", flag_reason=auto_flag_reason[:1000],
+            flagged_at=datetime.now(timezone.utc).isoformat(),
+        )
     try:
-        data = client.table("submissions").insert(row).execute().data
+        open_ = service.table("assignments").select("id").eq("id", assignment_id).eq("status", "active").execute().data
+    except Exception as exc:
+        _remove(service, BUCKET_SUBMISSIONS, paths)
+        raise DBError("The work was graded but could not be saved. Please try again.") from exc
+    if not open_:
+        _remove(service, BUCKET_SUBMISSIONS, paths)
+        raise DBError("This assignment is no longer open for submissions.")
+    try:
+        data = service.table("submissions").insert(row).execute().data
         return data[0]["id"]
     except Exception as exc:
-        _remove(client, BUCKET_SUBMISSIONS, paths)
+        _remove(service, BUCKET_SUBMISSIONS, paths)
         raise DBError("The work was graded but could not be saved. Please try again.") from exc
 
 
@@ -277,13 +356,6 @@ def flag_submission(client: Client, submission_id: str, reason: str) -> None:
         client.rpc("flag_submission", {"p_submission_id": submission_id, "p_reason": reason}).execute()
     except Exception as exc:
         raise DBError("Could not flag this submission. Please try again.") from exc
-
-
-def auto_flag_submission(client: Client, submission_id: str, reason: str) -> None:
-    try:
-        client.rpc("auto_flag_submission", {"p_submission_id": submission_id, "p_reason": reason}).execute()
-    except Exception:
-        pass  # advisory only; the student still sees the result
 
 
 def list_student_submissions(client: Client, student_id: str) -> list[dict]:

@@ -21,20 +21,23 @@ SCHEME_TYPES = ["png", "jpg", "jpeg", "webp", "pdf"]
 SCHEME_MAX_PAGES = 6
 
 
-def render(client, profile) -> None:
+def render(client, service, profile) -> None:
     try:
         assignments = db.list_teacher_assignments(client, profile.user_id)
         submissions = db.list_teacher_submissions(client, [a["id"] for a in assignments])
+        pending = [s for s in submissions if s["flagged_for_review"] and not s["resolved_at"]]
+        feedback = db.submission_feedback(client, [s["id"] for s in pending])  # only the rows shown in full
     except db.DBError as exc:
         alert("error", str(exc))
         return
+    for s in pending:
+        s["ai_feedback"] = feedback.get(s["id"], "")
 
-    pending = [s for s in submissions if s["flagged_for_review"] and not s["resolved_at"]]
     tab_assign, tab_queue, tab_stats = st.tabs(
         ["Assignments", f"Review queue ({len(pending)})" if pending else "Review queue", "Analytics"]
     )
     with tab_assign:
-        _assignments_tab(client, profile, assignments, submissions)
+        _assignments_tab(client, service, profile, assignments, submissions)
     with tab_queue:
         _review_tab(client, pending, submissions)
     with tab_stats:
@@ -51,7 +54,7 @@ def _validated_scheme(uploaded) -> bytes:
     return data
 
 
-def _assignments_tab(client, profile, assignments: list[dict], submissions: list[dict]) -> None:
+def _assignments_tab(client, service, profile, assignments: list[dict], submissions: list[dict]) -> None:
     page_header("Assignments", "Create assignments and upload the official mark scheme.")
 
     if notice := st.session_state.pop("teacher_notice", None):
@@ -101,10 +104,10 @@ def _assignments_tab(client, profile, assignments: list[dict], submissions: list
             unsafe_allow_html=True,
         )
         with st.expander("Manage"):
-            _manage_assignment(client, profile, a, counts.get(a["id"], 0))
+            _manage_assignment(client, service, profile, a, counts.get(a["id"], 0))
 
 
-def _manage_assignment(client, profile, a: dict, n_submissions: int) -> None:
+def _manage_assignment(client, service, profile, a: dict, n_submissions: int) -> None:
     closed = a["status"] == "closed"
     key = a["id"]
     if st.button("Reopen for students" if closed else "Close (stop new submissions)", key=f"status_{key}"):
@@ -133,7 +136,7 @@ def _manage_assignment(client, profile, a: dict, n_submissions: int) -> None:
     )
     if st.button("Delete assignment", key=f"del_{key}", disabled=not confirm):
         try:
-            db.delete_assignment(client, a["id"], a["mark_scheme_path"])
+            db.delete_assignment(client, service, a["id"], a["mark_scheme_path"])
             st.session_state.teacher_notice = f'"{a["title"]}" deleted.'
             st.rerun()
         except db.DBError as exc:
@@ -141,6 +144,13 @@ def _manage_assignment(client, profile, a: dict, n_submissions: int) -> None:
 
 
 # ------------------------------------------------------------------ review queue
+
+
+@st.cache_data(ttl=600, max_entries=64, show_spinner=False)
+def _work_pages(_client, path: str) -> list[bytes]:
+    """A student's stored work as JPEG pages. Cached by path (stored files never change), so
+    reruns of the console do not download and re-render it again."""
+    return images.to_jpeg_pages(db.download(_client, BUCKET_SUBMISSIONS, path))
 
 
 def _review_tab(client, pending: list[dict], submissions: list[dict]) -> None:
@@ -177,7 +187,7 @@ def _review_card(client, s: dict) -> None:
     if st.toggle("Show student work", key=f"show_{s['id']}"):
         for path in s["student_work_paths"]:
             try:
-                for page in images.to_jpeg_pages(db.download(client, BUCKET_SUBMISSIONS, path)):
+                for page in _work_pages(client, path):
                     st.image(page, width="stretch")
             except (db.DBError, images.ImageError) as exc:
                 alert("error", str(exc))

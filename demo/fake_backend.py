@@ -49,6 +49,7 @@ class _Store:
     def __init__(self) -> None:
         self.assignments: list[dict] = []
         self.submissions: list[dict] = []
+        self.attempts: list[dict] = []  # grading_attempts: the 24-hour allowance
         self.files: dict[str, bytes] = {}
         self._seed()
 
@@ -158,6 +159,10 @@ def new_client(settings):
     return object()
 
 
+def new_service_client(settings):
+    return object()
+
+
 def sign_in(client, email, password):
     for profile in (TEACHER, *STUDENTS.values()):
         if profile.email == email.strip().lower():
@@ -204,13 +209,23 @@ def replace_mark_scheme(client, teacher_id, assignment_id, old_path, filename, d
             a["mark_scheme_path"] = path
 
 
-def delete_assignment(client, assignment_id, mark_scheme_path):
-    _store().assignments = [a for a in _store().assignments if a["id"] != assignment_id]
-    _store().submissions = [s for s in _store().submissions if s["assignment_id"] != assignment_id]
+def delete_assignment(client, service, assignment_id, mark_scheme_path):
+    store = _store()
+    gone = [s for s in store.submissions if s["assignment_id"] == assignment_id]
+    store.assignments = [a for a in store.assignments if a["id"] != assignment_id]
+    store.submissions = [s for s in store.submissions if s["assignment_id"] != assignment_id]
+    for path in [mark_scheme_path, *(p for s in gone for p in s["student_work_paths"])]:
+        store.files.pop(path, None)
 
 
 def list_teacher_submissions(client, assignment_ids):
-    return [dict(s) for s in _store().submissions if s["assignment_id"] in assignment_ids]
+    hidden = ("ai_feedback", "key_takeaway")  # like db.TEACHER_LIST_COLUMNS
+    return [{k: v for k, v in s.items() if k not in hidden}
+            for s in _store().submissions if s["assignment_id"] in assignment_ids]
+
+
+def submission_feedback(client, submission_ids):
+    return {s["id"]: s["ai_feedback"] for s in _store().submissions if s["id"] in submission_ids}
 
 
 def resolve_submission(client, submission_id, score, comment):
@@ -224,9 +239,17 @@ def list_open_assignments(client):
     return [dict(a) for a in _store().assignments if a["status"] == "active"]
 
 
-def count_gradings_today(client, student_id):
+def count_gradings_today(service, student_id):
     since = _iso(_now() - timedelta(days=1))
-    return sum(1 for s in _store().submissions if s["student_id"] == student_id and s["created_at"] >= since)
+    return sum(1 for a in _store().attempts if a["student_id"] == student_id and a["created_at"] >= since)
+
+
+def reserve_grading(service, student_id, cap):
+    attempt = {"student_id": student_id, "created_at": _iso(_now())}
+    _store().attempts.append(attempt)
+    if count_gradings_today(service, student_id) > cap:
+        _store().attempts.remove(attempt)
+        raise DBError(f"You have used all {cap} gradings for the last 24 hours. Please try again later.")
 
 
 def upload_student_work(client, student_id, files):
@@ -238,11 +261,13 @@ def upload_student_work(client, student_id, files):
     return paths
 
 
-def save_submission(client, assignment_id, student_id, paths, result):
-    assignment = next(a for a in _store().assignments if a["id"] == assignment_id)
+def save_submission(service, assignment_id, student_id, paths, result, auto_flag_reason=None):
+    assignment = next((a for a in _store().assignments if a["id"] == assignment_id and a["status"] == "active"), None)
+    if assignment is None:
+        raise DBError("This assignment is no longer open for submissions.")
     student = STUDENTS[student_id]
     row = _store()._row(assignment, student, result.score_awarded, result.score_total, result.confidence,
-                     result.topic, False, "student", "", _now())
+                        result.topic, bool(auto_flag_reason), "ai", auto_flag_reason, _now())
     row.update(student_work_paths=paths, ai_feedback=result.to_markdown(), key_takeaway=result.key_takeaway)
     _store().submissions.insert(0, row)
     return row["id"]
@@ -255,21 +280,16 @@ def flag_submission(client, submission_id, reason):
                      flag_reason=reason.strip() or "Student requested manual review.", flagged_at=_iso(_now()))
 
 
-def auto_flag_submission(client, submission_id, reason):
-    for s in _store().submissions:
-        if s["id"] == submission_id and not s["flagged_for_review"]:
-            s.update(flagged_for_review=True, flag_source="ai", flag_reason=reason, flagged_at=_iso(_now()))
-
-
 def list_student_submissions(client, student_id):
     return [dict(s) for s in _store().submissions if s["student_id"] == student_id]
 
 
 DB_FUNCTIONS = (
-    "new_client sign_in sign_up sign_out download create_assignment list_teacher_assignments "
-    "set_assignment_status replace_mark_scheme delete_assignment list_teacher_submissions "
-    "resolve_submission list_open_assignments count_gradings_today upload_student_work "
-    "save_submission flag_submission auto_flag_submission list_student_submissions"
+    "new_client new_service_client sign_in sign_up sign_out download create_assignment "
+    "list_teacher_assignments set_assignment_status replace_mark_scheme delete_assignment "
+    "list_teacher_submissions submission_feedback resolve_submission list_open_assignments "
+    "count_gradings_today reserve_grading upload_student_work save_submission flag_submission "
+    "list_student_submissions"
 ).split()
 
 

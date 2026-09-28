@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import warnings
 
 from PIL import Image, ImageOps
 
@@ -11,8 +12,10 @@ MAX_UPLOAD_BYTES = 15 * 1024 * 1024
 MAX_PAGES = 4
 JPEG_QUALITY = 85
 
-# Guards against decompression bombs; Pillow raises above 2x this value.
+# Guards against decompression bombs. Pillow only warns between 1x and 2x this value, so
+# to_jpeg_pages turns that warning into a rejection too.
 Image.MAX_IMAGE_PIXELS = 60_000_000
+PDF_MAX_SCALE = 2.0
 
 
 class ImageError(ValueError):
@@ -38,6 +41,14 @@ def _to_jpeg(img: Image.Image) -> bytes:
     return buf.getvalue()
 
 
+def _render_page(page) -> Image.Image:
+    # Scale from the page's own size so the bitmap is never larger than we keep: a tiny PDF can
+    # declare a 200-inch page, which at a fixed 2x would need gigabytes before any downscaling.
+    width, height = page.get_size()
+    scale = min(PDF_MAX_SCALE, MAX_SIDE_PX / max(width, height, 1))
+    return page.render(scale=scale).to_pil()
+
+
 def _render_pdf(data: bytes, max_pages: int) -> list[bytes]:
     try:
         import pypdfium2 as pdfium
@@ -51,7 +62,7 @@ def _render_pdf(data: bytes, max_pages: int) -> list[bytes]:
                 f"That PDF has {count} pages; the limit is {max_pages}. "
                 "Split it or upload only the relevant pages."
             )
-        return [_to_jpeg(pdf[i].render(scale=2.0).to_pil()) for i in range(count)]
+        return [_to_jpeg(_render_page(pdf[i])) for i in range(count)]
     except ImageError:
         raise
     except Exception as exc:
@@ -70,8 +81,10 @@ def to_jpeg_pages(data: bytes, max_pages: int = MAX_PAGES) -> list[bytes]:
     if is_pdf(data):
         return _render_pdf(data, max_pages)
     try:
-        img = Image.open(io.BytesIO(data))
-        img.load()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            img = Image.open(io.BytesIO(data))
+            img.load()
         img = ImageOps.exif_transpose(img)  # phone photos are often stored rotated
         return [_to_jpeg(img)]
     except Exception as exc:

@@ -159,3 +159,23 @@ def test_markdown_fences_are_not_stripped_but_json_loads_may_still_fail(settings
     fenced = "```json\n" + json.dumps(GOOD) + "\n```"
     result, client = run(settings, completion(text=fenced), completion())
     assert result.score_total == 2 and len(client.calls) == 2
+
+
+def test_client_retries_once_and_times_out_per_request(settings):
+    client = deepseek.make_client(settings)
+    assert client.max_retries == 1
+    assert client.timeout == deepseek.REQUEST_TIMEOUT_S
+
+
+def test_requests_carry_a_timeout_within_the_deadline(settings):
+    _, client = run(settings, completion())
+    assert 0 < client.calls[0]["timeout"] <= deepseek.REQUEST_TIMEOUT_S
+
+
+def test_no_second_attempt_once_the_deadline_is_spent(settings, monkeypatch):
+    clock = iter([0.0, 0.0, deepseek.DEADLINE_S - 1])  # the first attempt used almost the whole budget
+    monkeypatch.setattr(deepseek.time, "monotonic", lambda: next(clock))
+    client = FakeClient(completion(text="", finish="length"), completion())
+    with pytest.raises(deepseek.GradingError, match="ran out of space"):
+        deepseek.grade(settings, [b"s"], [b"w"], client=client)
+    assert len(client.calls) == 1

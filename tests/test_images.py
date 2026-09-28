@@ -80,6 +80,24 @@ def test_multiple_files_share_one_page_budget():
         images.files_to_jpeg_pages(blobs + [make_image()], max_pages=4)
 
 
+def test_huge_pdf_page_is_rendered_at_a_capped_size():
+    import pypdfium2 as pdfium
+
+    pdf = pdfium.PdfDocument.new()
+    pdf.new_page(14400, 14400)  # 200 x 200 inches: at a fixed 2x scale this would be a ~3 GB bitmap
+    buf = io.BytesIO()
+    pdf.save(buf)
+    (page,) = images.to_jpeg_pages(buf.getvalue())
+    assert max(decode(page).size) <= images.MAX_SIDE_PX
+
+
+def test_decompression_bomb_is_rejected(monkeypatch):
+    # Pillow only warns between MAX_IMAGE_PIXELS and twice that; treat the warning as a rejection
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 1000)
+    with pytest.raises(images.ImageError):
+        images.to_jpeg_pages(make_image(size=(50, 30)))  # 1500 px: in the warning band
+
+
 def test_no_files_rejected():
     with pytest.raises(images.ImageError):
         images.files_to_jpeg_pages([])

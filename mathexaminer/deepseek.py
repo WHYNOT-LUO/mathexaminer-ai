@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import json
+import time
 from typing import Any
 
 import openai
@@ -21,6 +22,12 @@ from .models import TOPICS, GradingResult, ResultParseError
 MAX_TOKENS = 32000
 # First attempt reasons at high effort; the retry drops to low so it cannot run out again.
 REASONING_EFFORTS = ("high", "low")
+# Time limits, so a stuck API cannot keep a student on the spinner for long. One request may take
+# REQUEST_TIMEOUT_S (the SDK retries a transient failure once); no new attempt starts after the
+# DEADLINE_S budget for the whole grading is spent.
+REQUEST_TIMEOUT_S = 150.0
+DEADLINE_S = 300.0
+MIN_ATTEMPT_S = 30.0
 
 SYSTEM_PROMPT = """You are a strict but fair CIE A-Level Mathematics examiner.
 
@@ -97,8 +104,8 @@ def make_client(settings: Settings) -> openai.OpenAI:
     return openai.OpenAI(
         api_key=settings.deepseek_api_key,
         base_url=settings.deepseek_base_url,
-        max_retries=3,
-        timeout=300.0,
+        max_retries=1,
+        timeout=REQUEST_TIMEOUT_S,
     )
 
 
@@ -157,10 +164,16 @@ def grade(
     client = client or make_client(settings)
     request = build_request(settings, scheme_pages, student_pages)
     last_error = "The AI service is unavailable."
+    deadline = time.monotonic() + DEADLINE_S
 
     for effort in REASONING_EFFORTS:
+        remaining = deadline - time.monotonic()
+        if remaining < MIN_ATTEMPT_S:
+            break
         try:
-            response = client.chat.completions.create(**request, reasoning_effort=effort)
+            response = client.chat.completions.create(
+                **request, reasoning_effort=effort, timeout=min(REQUEST_TIMEOUT_S, remaining)
+            )
         except openai.APIError as exc:
             raise _translate_api_error(exc, settings) from exc
         try:

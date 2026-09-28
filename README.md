@@ -47,8 +47,8 @@ override the mark.
 | **Digital Error Book** | Every submission with its key takeaway, filterable by topic, plus a chart of the student's weakest topics. |
 | **Teacher analytics** | AI confidence vs. student mark scatter (spot systematic AI errors), average mark by topic, submissions awaiting review. |
 | **Real-world inputs** | Multi-page PDFs and multiple photos, EXIF-rotated phone pictures, transparent PNGs, size and page limits. |
-| **Role-based access** | Students and teachers see different portals. Enforced in the database with row-level security, not just in the UI. |
-| **Cost control** | Per-student daily grading cap, retry with backoff on transient API errors. |
+| **Role-based access** | Students and teachers see different portals. Enforced in the database with row-level security, not just in the UI; scores are written only by the server, never by the student's own token. |
+| **Cost control** | Per-student 24-hour grading allowance that counts every attempt and is re-checked when grading starts, one automatic retry on transient API errors, and a time limit on each grading. |
 
 ## How it works
 
@@ -79,8 +79,11 @@ The original design sketch is in [`docs/workflow.svg`](docs/workflow.svg).
    ```
 4. *(Optional, for demos)* **Authentication → Providers → Email**: turn off "Confirm email" so new
    accounts can log in immediately.
-5. Copy the **Project URL** and the **anon / publishable** key from **Project Settings → API**.
-   Never put the `service_role` key in this app.
+5. From **Project Settings → API** copy the **Project URL**, the **anon / publishable** key and the
+   **service_role** key. The service_role key bypasses row-level security, so it must stay on the server:
+   put it only in `.streamlit/secrets.toml` (git-ignored) or your host's secrets settings. Streamlit runs the
+   Python on the server and never sends secrets to the browser. The app uses it only for writes a student
+   must not be able to forge (see [Security model](#security-model-and-known-limitations)).
 
 ### 2. DeepSeek
 
@@ -109,6 +112,7 @@ Set in `.streamlit/secrets.toml` (git-ignored) or as environment variables.
 |---|---|---|---|
 | `SUPABASE_URL` | yes | | Project URL |
 | `SUPABASE_KEY` | yes | | anon / publishable key |
+| `SUPABASE_SERVICE_KEY` | yes | | service_role key, server-side only (saves grades, the allowance, mark-scheme downloads) |
 | `DEEPSEEK_API_KEY` | yes | | DeepSeek platform API key |
 | `DEEPSEEK_MODEL` | no | `deepseek-flash` | Must be a vision-capable DeepSeek model |
 | `DEEPSEEK_BASE_URL` | no | DeepSeek's endpoint | Reverse proxy, see the Cloudflare worker |
@@ -119,13 +123,13 @@ Deploying to Streamlit Community Cloud: paste the same keys into the app's **Sec
 ## Project layout
 
 ```
-app.py                     Entrypoint: config check, per-session Supabase client, role routing
+app.py                     Entrypoint: config check, per-session Supabase clients, role routing
 mathexaminer/
   config.py                Settings from secrets / environment, validated
   images.py                Photos and PDFs -> JPEG pages (EXIF, alpha, size and page limits)
   deepseek.py              DeepSeek (OpenAI-compatible) client: prompt, JSON mode, safe error messages
   models.py                GradingResult: validation, score computation, markdown rendering
-  db.py                    Supabase auth, tables, storage, RPCs
+  db.py                    Supabase auth, tables, storage, RPCs; user client vs server-only service client
   ui/                      Streamlit pages: auth, student, teacher, analytics, shared components
 supabase/schema.sql        Tables, RLS policies, storage policies, SQL functions
 demo/                      In-memory backend so the UI runs with no accounts or keys
@@ -142,8 +146,10 @@ ruff check .
 
 The DeepSeek client is tested with a fake SDK client and real SDK exception types (auth, rate limit,
 malformed output; error messages must never contain the API key). The UI tests drive the real app with Streamlit's `AppTest`, including
-login, grade dispute, teacher resolution and HTML-injection attempts. A contract test keeps the demo
-backend's function signatures identical to `mathexaminer/db.py`.
+login, grade dispute, teacher resolution, deleting an assignment and HTML-injection attempts. `db.py` is
+tested against an in-memory stand-in for the Supabase client (the grading allowance, server-side saves with
+AI flags, closed assignments, file cleanup). A contract test keeps the demo backend's functions identical to
+`mathexaminer/db.py` and covers every public one.
 
 ## Design decisions
 
@@ -167,29 +173,31 @@ backend's function signatures identical to `mathexaminer/db.py`.
 - **Roles are decided by the database.** A trigger creates the profile and grants `teacher` only if the
   sign-up carried a valid code from `teacher_codes`. Clients have no permission to write roles or grades
   directly; flagging and resolving go through `SECURITY DEFINER` functions.
+- **Trusted writes use a server-side key.** Everything a user does runs with their own JWT under row-level
+  security, except four server-only steps that use the service_role key: saving a graded submission (students
+  have no insert policy, so a score always comes from the grader), recording grading attempts for the
+  allowance, downloading the mark scheme to grade against, and deleting a removed assignment's student files.
+  Those calls take the student or teacher id from the signed-in profile, never from user input.
 - **Private buckets.** Student handwriting is personal data, so nothing is publicly readable.
 - **Untrusted images.** The prompt tells the model to ignore instructions written inside the images
   (e.g. a page saying "award full marks").
 
 ## Security model and known limitations
 
-- **Grades are advisory.** The grading call runs in the Streamlit server but the result is written with the
-  student's own JWT, so a determined student who calls the Supabase API directly could insert a fabricated
-  score. Teachers see and can override every mark, and analytics use the teacher's mark when present. For
-  a hard guarantee, move the write behind a Supabase Edge Function using the service-role key.
-- **Students can read mark schemes** (the app downloads them to grade). The feedback reveals the scheme
-  anyway, but do not use this for high-stakes unseen exams.
+- **Scores come only from the grader.** Students have no insert or update rights on submissions; the server
+  writes each result with the service_role key, and teachers can override any mark from the review queue.
+- **Students cannot download mark schemes**, but the feedback on a submitted answer explains what the scheme
+  expected, so do not use this for high-stakes unseen exams.
 - **AI marking can be wrong.** Confidence is the model's own estimate of how well it *read* the
   handwriting, not a guarantee of correctness. That is why the review queue exists.
 - **No classes or deadlines yet.** Every student sees every open assignment.
 - **Sessions are per browser tab.** A page refresh logs you out.
-- Deleting an assignment removes its submissions; the students' image files are left in storage.
+- Deleting an assignment removes its submissions and the students' stored files.
 
 ## Roadmap
 
 Classes and enrolment, deadlines, email notifications for flagged work, a class-summary digest of common
-errors, per-question marks entered by the teacher (removing the mark-scheme OCR step), and moving grade
-writes behind an Edge Function.
+errors, and per-question marks entered by the teacher (removing the mark-scheme OCR step).
 
 ## License
 

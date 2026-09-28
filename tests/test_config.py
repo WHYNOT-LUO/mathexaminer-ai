@@ -4,15 +4,16 @@ from mathexaminer import config
 
 
 def test_missing_required_settings_names_them(monkeypatch):
-    for name in ("SUPABASE_URL", "SUPABASE_KEY", "DEEPSEEK_API_KEY"):
+    for name in ("SUPABASE_URL", "SUPABASE_KEY", "SUPABASE_SERVICE_KEY", "DEEPSEEK_API_KEY"):
         monkeypatch.delenv(name, raising=False)
-    with pytest.raises(config.ConfigError, match="SUPABASE_URL, SUPABASE_KEY, DEEPSEEK_API_KEY"):
+    with pytest.raises(config.ConfigError, match="SUPABASE_URL, SUPABASE_KEY, SUPABASE_SERVICE_KEY, DEEPSEEK_API_KEY"):
         config.load_settings()
 
 
 def test_defaults_and_overrides(monkeypatch):
     monkeypatch.setenv("SUPABASE_URL", "https://x.supabase.co")
     monkeypatch.setenv("SUPABASE_KEY", "anon")
+    monkeypatch.setenv("SUPABASE_SERVICE_KEY", "service")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
     s = config.load_settings()
     assert s.deepseek_model == config.DEFAULT_DEEPSEEK_MODEL
@@ -30,7 +31,17 @@ def test_defaults_and_overrides(monkeypatch):
 def test_bad_values_rejected(monkeypatch, name, value):
     monkeypatch.setenv("SUPABASE_URL", "https://x.supabase.co")
     monkeypatch.setenv("SUPABASE_KEY", "anon")
+    monkeypatch.setenv("SUPABASE_SERVICE_KEY", "service")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
     monkeypatch.setenv(name, value)
     with pytest.raises(config.ConfigError):
+        config.load_settings()
+
+
+def test_service_key_must_not_be_the_anon_key(monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "https://x.supabase.co")
+    monkeypatch.setenv("SUPABASE_KEY", "same")
+    monkeypatch.setenv("SUPABASE_SERVICE_KEY", "same")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
+    with pytest.raises(config.ConfigError, match="service_role"):
         config.load_settings()
