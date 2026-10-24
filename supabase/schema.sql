@@ -38,6 +38,8 @@ create table if not exists public.assignments (
     status            text not null default 'active' check (status in ('active', 'closed')),
     created_at        timestamptz not null default now()
 );
+-- Optional question sheet students see before answering (added later, so safe on older databases).
+alter table public.assignments add column if not exists question_path text;
 
 create table if not exists public.submissions (
     id                    uuid primary key default gen_random_uuid(),
@@ -237,7 +239,8 @@ drop policy if exists submissions_insert on public.submissions;
 -- ---------------------------------------------------------------- storage
 
 insert into storage.buckets (id, name, public)
-values ('markschemes', 'markschemes', false), ('submissions', 'submissions', false)
+values ('markschemes', 'markschemes', false), ('submissions', 'submissions', false),
+       ('questions', 'questions', false)
 on conflict (id) do update set public = false;
 
 -- Mark schemes: files live under "<teacher_id>/<uuid>.<ext>". Only their owning teacher may read
@@ -278,6 +281,26 @@ drop policy if exists submissions_files_delete on storage.objects;
 create policy submissions_files_delete on storage.objects
     for delete to authenticated
     using (bucket_id = 'submissions' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- Question sheets: files live under "<teacher_id>/<uuid>.<ext>". Anyone signed in can read the
+-- question of an assignment they can see (row-level security on assignments limits this to
+-- active assignments, plus a teacher's own); only the owning teacher may upload or delete.
+drop policy if exists questions_read on storage.objects;
+create policy questions_read on storage.objects
+    for select to authenticated
+    using (bucket_id = 'questions'
+           and exists (select 1 from public.assignments a where a.question_path = name));
+
+drop policy if exists questions_write on storage.objects;
+create policy questions_write on storage.objects
+    for insert to authenticated
+    with check (bucket_id = 'questions' and public.is_teacher()
+                and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists questions_delete on storage.objects;
+create policy questions_delete on storage.objects
+    for delete to authenticated
+    using (bucket_id = 'questions' and (storage.foldername(name))[1] = auth.uid()::text);
 
 -- ---------------------------------------------------------------- first teacher
 -- Create at least one teacher code, then share it with your teachers (it is entered at sign-up):

@@ -21,7 +21,7 @@ from typing import Any
 
 from supabase import Client, create_client
 
-from .config import BUCKET_SCHEMES, BUCKET_SUBMISSIONS, Settings
+from .config import BUCKET_QUESTIONS, BUCKET_SCHEMES, BUCKET_SUBMISSIONS, Settings
 
 
 class DBError(Exception):
@@ -131,14 +131,26 @@ def _remove(client: Client, bucket: str, paths: list[str]) -> None:
 # ------------------------------------------------------------------ teacher
 
 
-def create_assignment(client: Client, teacher_id: str, title: str, filename: str, data: bytes, mime: str) -> None:
+def create_assignment(
+    client: Client, teacher_id: str, title: str, filename: str, data: bytes, mime: str,
+    question: tuple[str, bytes, str] | None = None,
+) -> None:
+    """Create an assignment from its mark scheme and, optionally, a question sheet students can see.
+
+    ``question`` is (filename, bytes, mime type), like an uploaded file.
+    """
     path = _upload(client, BUCKET_SCHEMES, teacher_id, filename, data, mime)
+    question_path = None
     try:
+        if question:
+            question_path = _upload(client, BUCKET_QUESTIONS, teacher_id, *question)
         client.table("assignments").insert(
-            {"teacher_id": teacher_id, "title": title, "mark_scheme_path": path}
+            {"teacher_id": teacher_id, "title": title, "mark_scheme_path": path, "question_path": question_path}
         ).execute()
     except Exception as exc:
         _remove(client, BUCKET_SCHEMES, [path])
+        if question_path:
+            _remove(client, BUCKET_QUESTIONS, [question_path])
         raise DBError("Could not create the assignment.") from exc
 
 
@@ -146,7 +158,7 @@ def list_teacher_assignments(client: Client, teacher_id: str) -> list[dict]:
     try:
         return (
             client.table("assignments")
-            .select("id, title, status, mark_scheme_path, created_at")
+            .select("id, title, status, mark_scheme_path, question_path, created_at")
             .eq("teacher_id", teacher_id)
             .order("created_at", desc=True)
             .execute()
@@ -178,7 +190,9 @@ def replace_mark_scheme(
     _remove(client, BUCKET_SCHEMES, [old_path])
 
 
-def delete_assignment(client: Client, service: Client, assignment_id: str, mark_scheme_path: str) -> None:
+def delete_assignment(
+    client: Client, service: Client, assignment_id: str, mark_scheme_path: str, question_path: str | None = None
+) -> None:
     """Delete an assignment, its submissions (FK cascade) and every stored file they point to.
 
     The student work paths are read with the teacher's own client, so row-level security limits
@@ -194,6 +208,8 @@ def delete_assignment(client: Client, service: Client, assignment_id: str, mark_
     except Exception as exc:
         raise DBError("Could not delete the assignment.") from exc
     _remove(client, BUCKET_SCHEMES, [mark_scheme_path])
+    if question_path:
+        _remove(client, BUCKET_QUESTIONS, [question_path])
     _remove(service, BUCKET_SUBMISSIONS, [p for r in rows for p in (r.get("student_work_paths") or [])])
 
 
@@ -257,7 +273,7 @@ def list_open_assignments(client: Client) -> list[dict]:
     try:
         return (
             client.table("assignments")
-            .select("id, title, mark_scheme_path, created_at")
+            .select("id, title, mark_scheme_path, question_path, created_at")
             .eq("status", "active")
             .order("created_at", desc=True)
             .execute()

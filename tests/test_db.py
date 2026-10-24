@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from mathexaminer import db
-from mathexaminer.config import BUCKET_SCHEMES, BUCKET_SUBMISSIONS
+from mathexaminer.config import BUCKET_QUESTIONS, BUCKET_SCHEMES, BUCKET_SUBMISSIONS
 from mathexaminer.models import GradingResult
 
 
@@ -69,11 +69,15 @@ class _Bucket:
     def remove(self, paths):
         self.fake.removed.setdefault(self.name, []).extend(paths)
 
+    def upload(self, path, file, file_options=None):
+        self.fake.uploaded.setdefault(self.name, []).append(path)
+
 
 class FakeSupabase:
     def __init__(self, **tables):
         self.tables = {k: list(v) for k, v in tables.items()}
         self.removed: dict[str, list[str]] = {}
+        self.uploaded: dict[str, list[str]] = {}
         self.selects: list[tuple[str, str]] = []
         self.storage = SimpleNamespace(from_=lambda name: _Bucket(self, name))
 
@@ -154,6 +158,32 @@ def test_delete_assignment_also_removes_the_students_files():
     assert [a["id"] for a in teacher.tables["assignments"]] == ["a2"]
     assert teacher.removed[BUCKET_SCHEMES] == ["t/scheme.pdf"]
     assert sorted(service.removed[BUCKET_SUBMISSIONS]) == ["s1/p.jpg", "s1/q.jpg", "s2/r.pdf"]
+
+
+def test_delete_assignment_also_removes_its_question_sheet():
+    teacher = FakeSupabase(assignments=[{"id": "a1"}], submissions=[])
+    db.delete_assignment(teacher, FakeSupabase(), "a1", "t/scheme.pdf", "t/question.png")
+    assert teacher.removed[BUCKET_QUESTIONS] == ["t/question.png"]
+
+
+# ---------------------------------------------------------------- creating
+
+
+def test_create_assignment_stores_an_optional_question_sheet():
+    teacher = FakeSupabase()
+    db.create_assignment(teacher, "t1", "Stationary points", "ms.pdf", b"%PDF", "application/pdf",
+                         question=("question.png", b"png", "image/png"))
+    (row,) = teacher.tables["assignments"]
+    assert row["mark_scheme_path"].startswith("t1/") and row["mark_scheme_path"].endswith(".pdf")
+    assert row["question_path"].startswith("t1/") and row["question_path"].endswith(".png")
+    assert teacher.uploaded == {BUCKET_SCHEMES: [row["mark_scheme_path"]], BUCKET_QUESTIONS: [row["question_path"]]}
+
+
+def test_create_assignment_without_a_question_sheet():
+    teacher = FakeSupabase()
+    db.create_assignment(teacher, "t1", "Title", "ms.pdf", b"%PDF", "application/pdf")
+    (row,) = teacher.tables["assignments"]
+    assert row["question_path"] is None and BUCKET_QUESTIONS not in teacher.uploaded
 
 
 # ---------------------------------------------------------------- teacher queries

@@ -21,7 +21,7 @@ and who is allowed to do what. For setup and features, see the [README](../READM
 | Result model | Validates the AI's answer and computes the totals. | [`mathexaminer/models.py`](../mathexaminer/models.py) |
 | Data layer | Every Supabase call: sign-in, tables, file storage. | [`mathexaminer/db.py`](../mathexaminer/db.py) |
 | Database | Supabase: Postgres with row-level security, authentication, and private file storage. | [`supabase/schema.sql`](../supabase/schema.sql) |
-| Demo backend | An in-memory stand-in for Supabase and DeepSeek, so the real interface runs with no accounts or keys. | [`demo/`](../demo) |
+| Demo backend | An in-memory stand-in for Supabase and DeepSeek, so the real interface runs with no accounts or keys. It replays real markings recorded from the grader for three real handwritten answers. | [`demo/`](../demo) |
 
 ## How one grading flows
 
@@ -96,6 +96,7 @@ erDiagram
         uuid teacher_id FK
         text title
         text mark_scheme_path
+        text question_path "optional"
         text status "active or closed"
     }
     SUBMISSIONS {
@@ -121,8 +122,8 @@ erDiagram
 ```
 
 There is also a `teacher_codes` table, holding the codes that make a new account a teacher. Files
-live in two private storage buckets: `markschemes` (one folder per teacher) and `submissions` (one
-folder per student). The full definitions, with every column and constraint, are in
+live in three private storage buckets: `markschemes` and `questions` (one folder per teacher) and
+`submissions` (one folder per student). The full definitions, with every column and constraint, are in
 [`supabase/schema.sql`](../supabase/schema.sql).
 
 ## Access control
@@ -138,6 +139,7 @@ user can see and change. The app's own checks are a convenience on top, not the 
 | `submissions` | Read own; flag or dispute own (through a database function) | Read those for own assignments; set the final mark (through a database function, 0 to the total) | The only way a submission is created |
 | `grading_attempts` | No access | No access | Records and counts the allowance |
 | Mark scheme files | No access | Read, upload and delete own | Downloads them to grade |
+| Question sheets | Read those of open assignments | Read those of assignments they can see; upload and delete own | — |
 | Student work files | Read, upload and delete own | Read files submitted to own assignments | Deletes them when their assignment is deleted |
 
 The role is set when an account is created: a database trigger makes the account a teacher only if
@@ -181,6 +183,9 @@ typed.
   Sharing one client across sessions (for example with `st.cache_resource`) would let one user's
   requests run as another user.
 - **Private storage.** Student handwriting is personal data, so neither bucket is public.
-- **A demo that is honest about being a demo.** The hosted demo runs the real interface on sample
-  data. It labels itself "Demo mode", returns a fixed example marking instead of calling the AI,
-  and gives each visitor a private copy that resets on sign-out.
+- **A demo built from real work.** The hosted demo runs the real interface on a real question,
+  mark scheme and three handwritten answers. Each answer was graded once by the real grader, and the
+  demo replays those markings ([`demo/samples/recorded-gradings.json`](../demo/samples/recorded-gradings.json))
+  instead of calling the AI, so it costs nothing to run and every score matches its marks. It labels
+  itself "Demo mode", refuses to pretend to mark anything else, and gives each visitor a private
+  copy that carries over between the student and teacher accounts until the page is refreshed.

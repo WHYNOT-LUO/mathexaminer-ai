@@ -1,0 +1,213 @@
+{
+  "recorded_on": "2026-10-24",
+  "how": "Each answer was graded once by mathexaminer.deepseek against mark-scheme.pdf; this is the model's raw JSON reply.",
+  "gradings": [
+    {
+      "answer": "answer-strong.png",
+      "model": "deepseek-flash",
+      "reasoning_effort": "high",
+      "seconds": 11.8,
+      "usage": {
+        "prompt_tokens": 2544,
+        "completion_tokens": 656,
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 2544
+      },
+      "reply": {
+        "marks": [
+          {
+            "label": "1",
+            "mark_type": "M1",
+            "max_marks": 1,
+            "comment": "Differentiates $y=x^3-6x^2+9x+2$ to obtain $y'=3x^2-12x+9$, a valid differentiation method.",
+            "awarded": 1
+          },
+          {
+            "label": "1",
+            "mark_type": "A1",
+            "max_marks": 1,
+            "comment": "Derivative $y'=3x^2-12x+9$ is fully correct.",
+            "awarded": 1
+          },
+          {
+            "label": "1",
+            "mark_type": "M1",
+            "max_marks": 1,
+            "comment": "Sets $y'=0$, simplifies to $x^2-4x+3=0$ and factorises $(x-1)(x-3)=0$, a valid method for solving.",
+            "awarded": 1
+          },
+          {
+            "label": "1",
+            "mark_type": "A1",
+            "max_marks": 1,
+            "comment": "Correct x-coordinates $x=1$ or $x=3$.",
+            "awarded": 1
+          },
+          {
+            "label": "1",
+            "mark_type": "A1",
+            "max_marks": 1,
+            "comment": "Correct y-coordinates: $y=6$ when $x=1$ and $y=2$ when $x=3$, from substituting into the original equation.",
+            "awarded": 1
+          },
+          {
+            "label": "1",
+            "mark_type": "M1",
+            "max_marks": 1,
+            "comment": "Finds $y''=6x-12$ and evaluates it at each stationary point, a valid second-derivative test.",
+            "awarded": 1
+          },
+          {
+            "label": "1",
+            "mark_type": "A1",
+            "max_marks": 1,
+            "comment": "Correct conclusions: $y''=-6<0$ gives a maximum at $(1,6)$ and $y''=6>0$ gives a minimum at $(3,2)$.",
+            "awarded": 1
+          }
+        ],
+        "summary": "The student produces a complete and fully correct solution: correct derivative, correct solution of $y'=0$ to give $x=1$ and $x=3$, correct y-coordinates, and a second-derivative test that correctly identifies the maximum and minimum. All seven marks are awarded.",
+        "topic": "Calculus",
+        "key_takeaway": "Keep the habit of fully justifying the nature of each stationary point with an evaluated second derivative and a clear maximum/minimum statement.",
+        "handwriting_confidence": 92
+      }
+    },
+    {
+      "answer": "answer-typical-mistake.png",
+      "model": "deepseek-flash",
+      "reasoning_effort": "high",
+      "seconds": 8.0,
+      "usage": {
+        "prompt_tokens": 2034,
+        "completion_tokens": 718,
+        "prompt_cache_hit_tokens": 1408,
+        "prompt_cache_miss_tokens": 626
+      },
+      "reply": {
+        "marks": [
+          {
+            "label": "1",
+            "mark_type": "M1",
+            "max_marks": 1,
+            "comment": "Differentiates the cubic, earning the method mark for differentiation.",
+            "awarded": 1
+          },
+          {
+            "label": "1",
+            "mark_type": "A1",
+            "max_marks": 1,
+            "comment": "Correct derivative $y'=3x^2-12x+9$ written accurately.",
+            "awarded": 1
+          },
+          {
+            "label": "1",
+            "mark_type": "M1",
+            "max_marks": 1,
+            "comment": "Sets $3x^2-12x+9=0$ and solves to obtain $x=1$ or $x=3$.",
+            "awarded": 1
+          },
+          {
+            "label": "1",
+            "mark_type": "A1",
+            "max_marks": 1,
+            "comment": "Both $x$-coordinates $x=1$ and $x=3$ correct.",
+            "awarded": 1
+          },
+          {
+            "label": "1",
+            "mark_type": "A1",
+            "max_marks": 1,
+            "comment": "Correct $y$-values: $y=6$ when $x=1$ and $y=2$ when $x=3$.",
+            "awarded": 1
+          },
+          {
+            "label": "1",
+            "mark_type": "M1",
+            "max_marks": 1,
+            "comment": "Finds $y''=6x-12$ and evaluates it at each stationary point, a valid test for nature.",
+            "awarded": 1
+          },
+          {
+            "label": "1",
+            "mark_type": "A1",
+            "max_marks": 1,
+            "comment": "Conclusion is reversed: $y''=-6<0$ at $x=1$ means a maximum at $(1,6)$, and $y''=6>0$ at $x=3$ means a minimum at $(3,2)$.",
+            "awarded": 0
+          }
+        ],
+        "summary": "The student differentiates correctly, solves the quadratic to find both stationary points, and evaluates the correct $y$-coordinates. The second derivative is also found and evaluated correctly, but the interpretation of its sign is inverted, so the final accuracy mark for the nature of the points is lost. Score 6/7.",
+        "topic": "Calculus",
+        "key_takeaway": "Remember $y''<0$ means a maximum and $y''>0$ means a minimum — check the sign before labelling each point.",
+        "handwriting_confidence": 88
+      }
+    },
+    {
+      "answer": "answer-hard-to-read.png",
+      "model": "deepseek-flash",
+      "reasoning_effort": "high",
+      "seconds": 11.8,
+      "usage": {
+        "prompt_tokens": 2052,
+        "completion_tokens": 1526,
+        "prompt_cache_hit_tokens": 1408,
+        "prompt_cache_miss_tokens": 644
+      },
+      "reply": {
+        "marks": [
+          {
+            "label": "1",
+            "mark_type": "M1",
+            "max_marks": 1,
+            "comment": "Correctly differentiates $y$ to obtain $\\frac{dy}{dx}$ using the power rule.",
+            "awarded": 1
+          },
+          {
+            "label": "1",
+            "mark_type": "A1",
+            "max_marks": 1,
+            "comment": "Derivative $\\frac{dy}{dx}=3x^2-12x+9$ is correct.",
+            "awarded": 1
+          },
+          {
+            "label": "1",
+            "mark_type": "M1",
+            "max_marks": 1,
+            "comment": "Sets $\\frac{dy}{dx}=0$ and solves the quadratic $x^2-4x+3=0$.",
+            "awarded": 1
+          },
+          {
+            "label": "1",
+            "mark_type": "A1",
+            "max_marks": 1,
+            "comment": "Correct $x$-coordinates $x=1$ and $x=3$.",
+            "awarded": 1
+          },
+          {
+            "label": "1",
+            "mark_type": "A1",
+            "max_marks": 1,
+            "comment": "Correct $y$-coordinates, computing $y=6$ at $x=1$ and $y=2$ at $x=3$.",
+            "awarded": 1
+          },
+          {
+            "label": "1",
+            "mark_type": "M1",
+            "max_marks": 1,
+            "comment": "Uses the second derivative $\\frac{d^2y}{dx^2}=6x-12$ to test nature.",
+            "awarded": 1
+          },
+          {
+            "label": "1",
+            "mark_type": "A1",
+            "max_marks": 1,
+            "comment": "Correct conclusion: maximum at $(1,6)$ (second derivative $-6$) and minimum at $(3,2)$ (second derivative $6$).",
+            "awarded": 1
+          }
+        ],
+        "summary": "The student produced a complete, fully correct solution: correct derivative, correct solution of the stationary equation, correct coordinates, and a valid second-derivative test with the right nature for each point. All 7 marks are awarded.",
+        "topic": "Calculus",
+        "key_takeaway": "Keep showing the second-derivative substitution value alongside each conclusion; this fully justifies the maximum/minimum classification.",
+        "handwriting_confidence": 85
+      }
+    }
+  ]
+}

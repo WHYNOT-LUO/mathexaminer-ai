@@ -16,8 +16,9 @@ a teacher, who makes the final call.
 
 > **Try it now: [mathexaminer-ai-demo.streamlit.app](https://mathexaminer-ai-demo.streamlit.app)**
 > Log in as `student@demo.school` or `teacher@demo.school` with any password. No sign-up or keys
-> needed. The demo runs the real interface on sample data with a fixed example marking, and each
-> visitor gets their own private copy.
+> needed. The homework in the demo is real: a question, its mark scheme and three handwritten answers,
+> each graded once by the real AI. The demo replays those recorded markings instead of calling the AI.
+> Try a sample answer as the student, dispute the mark, then sign in as the teacher to review it.
 
 ## Contents
 
@@ -58,7 +59,7 @@ the teacher's decision always overrides the AI's.
 | **Teacher: review queue** | **Teacher: analytics** |
 | ![Review queue](docs/screenshots/06-teacher-review.png) | ![Analytics](docs/screenshots/07-teacher-analytics.png) |
 
-<details><summary>More: login, submitting work, managing assignments</summary>
+<details><summary>More: login, the question and sample answers, a teacher's view of every submission</summary>
 
 ![Login](docs/screenshots/01-login.png)
 ![Submit](docs/screenshots/02-student-submit.png)
@@ -66,22 +67,24 @@ the teacher's decision always overrides the AI's.
 
 </details>
 
-*Screenshots are from the built-in demo, so the students and the marking shown are sample data.*
+*Screenshots are from the built-in demo. The handwriting and its marking are real (recorded from the AI);
+the student names are made up.*
 
 ## Features
 
 ### For students
 
-- **Submit work** as photos or a PDF: up to 4 pages, any mix of files. Phone photos are straightened automatically.
+- **See the question** the teacher attached, then **submit work** as photos or a PDF: up to 4 pages, any mix of files. Phone photos are straightened automatically.
 - **Mark-by-mark feedback** in Cambridge style (M1, A1, B1, ...), each mark with a short reason and maths written properly.
 - **A score, a topic and one key takeaway:** the single mistake not to repeat, or one habit worth keeping.
 - **Handwriting confidence:** how sure the AI is that it read the writing correctly.
 - **Dispute a mark** with a reason; the work goes to the teacher.
-- **Error Book:** every past submission with its takeaway and any teacher correction, filterable by topic, with a chart of the weakest topics.
+- **Error Book:** every past submission with the student's own pages, the takeaway and any teacher correction, filterable by topic, with a chart of the weakest topics.
 
 ### For teachers
 
-- **Assignments:** create one by uploading the official mark scheme (image or PDF, up to 6 pages). Close it to stop new submissions, replace the mark scheme, or delete it.
+- **Assignments:** create one by uploading the official mark scheme (image or PDF, up to 6 pages) and, optionally, the question sheet students will see. Close it to stop new submissions, replace the mark scheme, or delete it.
+- **Every submission:** for each assignment, open any student's handwritten pages next to the AI's marking, and set a final mark.
 - **Review queue:** work arrives here automatically when the AI's handwriting confidence is below 60%, and whenever a student disputes a mark. Teachers can open the student's original pages alongside the AI's marking, set the final mark and leave a comment.
 - **Class analytics:** submission count, average mark, average AI confidence and work awaiting review; a chart of AI confidence against students' marks, to show which gradings deserve a second look; and the average mark by topic.
 
@@ -90,7 +93,20 @@ the teacher's decision always overrides the AI's.
 - **The program does the arithmetic.** The AI returns one entry per mark; the app checks each entry and adds up the total itself.
 - **Access is enforced by the database**, through row-level security, not just hidden in the interface.
 - **Costs are capped:** each student has a grading allowance per 24 hours, and every grading has a time limit.
-- **92 automated tests** run on every push, on Python 3.10 and 3.12.
+- **102 automated tests** run on every push, on Python 3.10 and 3.12.
+
+### Measured speed and cost
+
+Grading the three real sample answers with `deepseek-flash` (October 2026):
+
+| Answer | Score | Handwriting confidence | Tokens in / out | Time | Cost at DeepSeek's listed prices |
+|---|---|---|---|---|---|
+| Strong | 7/7 | 92% | 2,544 / 656 | 12 s | $0.0008–$0.0016 |
+| Typical mistake (maximum and minimum swapped) | 6/7 | 88% | 2,034 / 718 | 8 s | $0.0005–$0.0011 |
+| Hard to read | 7/7 | 85% | 2,052 / 1,526 | 12 s | $0.0010–$0.0020 |
+
+That is about 0.05 to 0.2 US cents per grading; the range is DeepSeek's off-peak and peak prices.
+The marking replies themselves are in [`demo/samples/recorded-gradings.json`](demo/samples/recorded-gradings.json).
 
 ## How it works
 
@@ -182,7 +198,7 @@ Set these in `.streamlit/secrets.toml` or as environment variables.
 
 ```bash
 pip install -r requirements-dev.txt
-pytest       # 92 tests
+pytest       # 102 tests
 ruff check .
 ```
 
@@ -190,9 +206,9 @@ ruff check .
 |---|---|---|
 | `test_models.py` | 19 | Totals computed from the marks, clamping, unknown topics, bad numbers from the AI |
 | `test_deepseek.py` | 25 | The request sent to DeepSeek, the retry at low effort, time limits, friendly error messages that never contain the API key |
-| `test_app.py` | 18 | The real interface driven with Streamlit's `AppTest`: log in, the result view and Error Book, dispute, teacher review, deleting an assignment, attempts to inject HTML, demo isolation |
+| `test_app.py` | 25 | The real interface driven with Streamlit's `AppTest`: log in, grading a sample answer, the question sheet, the Error Book, dispute, teacher review and the submissions list, deleting an assignment, attempts to inject HTML, demo isolation; and that every demo marking adds up to its score |
 | `test_images.py` | 16 | Rotation, transparency, PDFs, page and size limits, oversized "decompression bomb" images |
-| `test_db.py` | 8 | The grading allowance, server-side saving with flags, closed assignments, file clean-up |
+| `test_db.py` | 11 | The grading allowance, server-side saving with flags, closed assignments, question sheets, file clean-up |
 | `test_config.py` | 6 | Missing or invalid settings, and the service key not being the anon key |
 
 The AI and the database are replaced by fakes in the tests, so they need no keys and cost nothing. A
@@ -215,6 +231,7 @@ mathexaminer/
   ui/                      Streamlit pages: sign-in, student, teacher, analytics, shared components, styles
 supabase/schema.sql        Tables, row-level security, storage rules and database functions
 demo/                      In-memory backend, so the interface runs with no accounts or keys
+  samples/                 The real question, mark scheme, three handwritten answers and their recorded markings
 tests/                     pytest suite
 docs/                      Architecture notes, screenshots, the optional Cloudflare relay, the original design sketch
 .github/                   CI and the keep-the-demo-awake workflow
@@ -226,7 +243,7 @@ docs/                      Architecture notes, screenshots, the optional Cloudfl
 - **Roles cannot be self-assigned.** An account becomes a teacher only if it signs up with a valid teacher code, checked inside the database.
 - **Scores come only from the grader.** Students have no permission to create or edit submissions. The server saves each result, and a teacher's override is the only way a mark changes.
 - **Students cannot download mark schemes.** The server fetches them to grade.
-- **Files are private.** Mark schemes and student work are in private storage, never publicly linked. A teacher can open a student's work only if it was submitted to one of that teacher's assignments.
+- **Files are private.** Mark schemes, question sheets and student work are in private storage, never publicly linked. A teacher can open a student's work only if it was submitted to one of that teacher's assignments, and students can open only the question sheets of open assignments.
 - **Secrets stay on the server.** Streamlit runs the Python on the server; keys never reach the browser, and error messages never include them.
 - **Uploaded images are treated as untrusted.** The AI is told to ignore instructions written inside them, and every piece of text shown on screen is escaped.
 
@@ -238,6 +255,7 @@ The full access table is in [docs/architecture.md](docs/architecture.md#access-c
 - **The 60% review threshold is a starting point**, not a measured value. Comparing the AI's marks with teachers' final marks would show where it should be.
 - **No classes yet.** Every student sees every open assignment, and every teacher can see the list of all users' names.
 - **No deadlines or notifications.** Teachers check the review queue themselves.
+- **A question sheet can only be added when an assignment is created**, not replaced later.
 - **The feedback reveals the mark scheme's approach** once work is submitted, so this is for practice and homework, not unseen exams.
 - **Signing in lasts for one browser tab.** Refreshing the page signs you out.
 - **Supabase's free tier pauses** a project after 7 days without activity. The real app stops working until it is restored from the Supabase dashboard; the demo is unaffected.
@@ -257,6 +275,7 @@ The full access table is in [docs/architecture.md](docs/architecture.md#access-c
 | "You have used all 20 gradings for the last 24 hours." | Wait, or raise `MAX_GRADINGS_PER_DAY`. |
 | The real app cannot load anything | The Supabase project may be paused. Restore it from the Supabase dashboard. |
 | The demo shows "Yes, get this app back up!" | Click it and wait about 30 seconds while it starts. |
+| The demo says it "only marks the three sample answers" | The demo replays recorded markings, so it cannot mark new work. Use a sample answer, or run the real app. |
 
 ## Project history
 
@@ -265,6 +284,7 @@ The full access table is in [docs/architecture.md](docs/architecture.md#access-c
 3. **Rebuild (September 2026).** An audit found the Gemini model the app depended on had been retired, so grading no longer worked, and there were security gaps. I rebuilt it with JSON marking checked in code, database-enforced access, the review queue, analytics, the Error Book, automated tests and a public demo, and moved the AI to DeepSeek.
 4. **Real-world test.** Grading my own handwritten working end to end showed that a hard script could use the AI's whole output budget on reasoning and return no marks. I raised the budget and added the retry at low reasoning effort.
 5. **Code review.** Grades were moved to server-side writes, the allowance was made to count every attempt, and time limits were added to each grading.
+6. **Real demo (October 2026).** The public demo was rebuilt around a real question, my own mark scheme and three of my handwritten answers, each graded once by the real AI. At the same time I added question sheets for students and a submissions list for teachers, and limited each teacher to their own students' work.
 
 I designed the product (what it marks, how teacher review works, what students get back) and
 tested it with real handwriting. Much of the code was written with AI coding assistants.

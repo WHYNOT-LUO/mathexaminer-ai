@@ -8,9 +8,27 @@ from pathlib import Path
 
 import streamlit as st
 
+from .. import db, images
 from ..config import LOW_CONFIDENCE_THRESHOLD
 
 _CSS = Path(__file__).with_name("styles.css")
+
+
+@st.cache_data(ttl=600, max_entries=128, show_spinner=False)
+def stored_pages(_client, bucket: str, path: str, max_pages: int = images.MAX_PAGES) -> list[bytes]:
+    """A stored image or PDF as JPEG pages. Cached by bucket and path: stored files never change, and
+    callers only pass paths that row-level security already let the signed-in user see."""
+    return images.to_jpeg_pages(db.download(_client, bucket, path), max_pages=max_pages)
+
+
+def show_pages(client, bucket: str, paths: list[str], max_pages: int = images.MAX_PAGES) -> None:
+    """Show stored files page by page, or a friendly error if one cannot be read."""
+    for path in paths:
+        try:
+            for page in stored_pages(client, bucket, path, max_pages):
+                st.image(page, width="stretch")
+        except (db.DBError, images.ImageError) as exc:
+            alert("error", str(exc))
 
 
 def esc(value: object) -> str:
@@ -73,7 +91,7 @@ def format_date(iso: str | None) -> str:
     if not iso:
         return ""
     try:
-        return datetime.fromisoformat(iso.replace("Z", "+00:00")).strftime("%d %b %Y, %H:%M")
+        return datetime.fromisoformat(iso.replace("Z", "+00:00")).strftime("%d %b %Y, %H:%M UTC")
     except ValueError:
         return ""
 

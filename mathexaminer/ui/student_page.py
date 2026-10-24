@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 
 from .. import db, deepseek, images
-from ..config import BUCKET_SCHEMES, LOW_CONFIDENCE_THRESHOLD, Settings
+from ..config import BUCKET_QUESTIONS, BUCKET_SCHEMES, BUCKET_SUBMISSIONS, LOW_CONFIDENCE_THRESHOLD, Settings
 from ..models import effective_score
 from .components import (
     alert,
@@ -17,11 +19,28 @@ from .components import (
     page_header,
     result_cards,
     section_label,
+    show_pages,
     takeaway_box,
 )
 
 WORK_TYPES = ["png", "jpg", "jpeg", "webp", "pdf"]
 SCHEME_MAX_PAGES = 6
+
+# Real handwritten answers a visitor can submit without uploading anything, as
+# (button label, file name, image bytes). Only the demo fills this in; the real app leaves it empty.
+SAMPLE_ANSWERS: list[tuple[str, str, bytes]] = []
+
+
+@dataclass(frozen=True)
+class _SampleFile:
+    """Looks like an uploaded file to the grading code."""
+
+    name: str
+    data: bytes
+    type: str = "image/png"
+
+    def getvalue(self) -> bytes:
+        return self.data
 
 
 def render(client, service, profile, settings: Settings) -> None:
@@ -63,6 +82,9 @@ def _submit_tab(client, service, profile, settings: Settings) -> None:
     chosen = st.selectbox(
         "Assignment", assignments, format_func=lambda a: a["title"], label_visibility="collapsed"
     )
+    if chosen.get("question_path"):
+        with st.expander("📄 The question", expanded=True):
+            show_pages(client, BUCKET_QUESTIONS, [chosen["question_path"]], max_pages=SCHEME_MAX_PAGES)
 
     section_label("Step 2 - Upload your work")
     st.caption("Photos or scans (PNG, JPG, WEBP) or a PDF. Up to 4 pages in total. Flat, well-lit photos mark best.")
@@ -71,6 +93,16 @@ def _submit_tab(client, service, profile, settings: Settings) -> None:
         "Your work", type=WORK_TYPES, accept_multiple_files=True,
         label_visibility="collapsed", key=f"work_{nonce}",
     )
+    if SAMPLE_ANSWERS and not files:
+        st.caption("No photo to hand? Use one of these real handwritten answers:")
+        for col, (i, (label, _name, _data)) in zip(
+            st.columns(len(SAMPLE_ANSWERS)), enumerate(SAMPLE_ANSWERS), strict=True
+        ):
+            if col.button(label, key=f"sample_{i}", width="stretch"):
+                st.session_state.sample_choice = i
+        if (choice := st.session_state.get("sample_choice")) is not None:
+            _label, name, data = SAMPLE_ANSWERS[choice]
+            files = [_SampleFile(name, data)]
     remaining = max(0, settings.max_gradings_per_day - used_today)
     st.caption(f"Gradings left in the last 24 hours: {remaining} of {settings.max_gradings_per_day}")
 
@@ -155,6 +187,7 @@ def _result_view(client, last: dict) -> None:
 
     if st.button("← Grade another", key="grade_another"):
         st.session_state.pop("last_result", None)
+        st.session_state.pop("sample_choice", None)
         st.session_state.upload_nonce = st.session_state.get("upload_nonce", 0) + 1
         st.rerun()
 
@@ -203,4 +236,6 @@ def _error_book_tab(client, profile) -> None:
             if r["key_takeaway"]:
                 takeaway_box(r["key_takeaway"], key=f"takeaway_{r['id']}")
             override_note(r)
+            if r.get("student_work_paths") and st.toggle("Show my work", value=True, key=f"mywork_{r['id']}"):
+                show_pages(client, BUCKET_SUBMISSIONS, r["student_work_paths"])
             st.markdown(r["ai_feedback"])

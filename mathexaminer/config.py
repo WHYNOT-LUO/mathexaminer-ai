@@ -11,6 +11,7 @@ DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 
 BUCKET_SCHEMES = "markschemes"
 BUCKET_SUBMISSIONS = "submissions"
+BUCKET_QUESTIONS = "questions"
 
 LOW_CONFIDENCE_THRESHOLD = 60
 MODEL_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")

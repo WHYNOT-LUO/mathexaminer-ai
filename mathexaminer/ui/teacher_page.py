@@ -15,6 +15,7 @@ from .components import (
     format_date,
     page_header,
     section_label,
+    show_pages,
 )
 
 SCHEME_TYPES = ["png", "jpg", "jpeg", "webp", "pdf"]
@@ -48,7 +49,7 @@ def render(client, service, profile) -> None:
 
 
 def _validated_scheme(uploaded) -> bytes:
-    """Read an uploaded mark scheme and make sure the grader will be able to open it later."""
+    """Read an uploaded mark scheme or question sheet and make sure it can be opened later."""
     data = uploaded.getvalue()
     images.to_jpeg_pages(data, max_pages=SCHEME_MAX_PAGES)
     return data
@@ -66,6 +67,9 @@ def _assignments_tab(client, service, profile, assignments: list[dict], submissi
             scheme = st.file_uploader(
                 f"Mark scheme (PNG, JPG, WEBP or PDF up to {SCHEME_MAX_PAGES} pages)", type=SCHEME_TYPES
             )
+            question = st.file_uploader(
+                "Question sheet (optional; students see it before they answer)", type=SCHEME_TYPES
+            )
             if st.form_submit_button("Create assignment →"):
                 if not title.strip():
                     alert("error", "Please enter a title.")
@@ -74,9 +78,13 @@ def _assignments_tab(client, service, profile, assignments: list[dict], submissi
                 else:
                     try:
                         data = _validated_scheme(scheme)
+                        question_file = (
+                            (question.name, _validated_scheme(question), question.type) if question else None
+                        )
                         with st.spinner("Uploading…"):
                             db.create_assignment(
-                                client, profile.user_id, title.strip(), scheme.name, data, scheme.type
+                                client, profile.user_id, title.strip(), scheme.name, data, scheme.type,
+                                question=question_file,
                             )
                         st.session_state.teacher_notice = f'"{title.strip()}" created.'
                         st.session_state.new_asgn_nonce = st.session_state.get("new_asgn_nonce", 0) + 1
@@ -103,8 +111,31 @@ def _assignments_tab(client, service, profile, assignments: list[dict], submissi
             </div>{badge}</div>""",
             unsafe_allow_html=True,
         )
+        mine = [s for s in submissions if s["assignment_id"] == a["id"]]
+        if mine and st.toggle(f"Show the {len(mine)} submission(s)", key=f"subs_{a['id']}"):
+            _submission_list(client, mine)
         with st.expander("Manage"):
             _manage_assignment(client, service, profile, a, counts.get(a["id"], 0))
+
+
+def _submission_list(client, subs: list[dict]) -> None:
+    """Every submission to one assignment: the student's work, the AI's marking, and the final mark."""
+    try:
+        feedback = db.submission_feedback(client, [s["id"] for s in subs])
+    except db.DBError as exc:
+        alert("error", str(exc))
+        return
+    for s in subs:
+        awarded, total = effective_score(s)
+        if s["resolved_at"]:
+            status = "reviewed"
+        elif s["flagged_for_review"]:
+            status = "awaiting review"
+        else:
+            status = "AI mark"
+        label = f"{s['student_name']} · {awarded}/{total} · {status} · {format_date(s['created_at'])}"
+        with st.expander(label):
+            _review_card(client, {**s, "ai_feedback": feedback.get(s["id"], "")}, key_prefix="all")
 
 
 def _manage_assignment(client, service, profile, a: dict, n_submissions: int) -> None:
@@ -136,7 +167,7 @@ def _manage_assignment(client, service, profile, a: dict, n_submissions: int) ->
     )
     if st.button("Delete assignment", key=f"del_{key}", disabled=not confirm):
         try:
-            db.delete_assignment(client, service, a["id"], a["mark_scheme_path"])
+            db.delete_assignment(client, service, a["id"], a["mark_scheme_path"], a.get("question_path"))
             st.session_state.teacher_notice = f'"{a["title"]}" deleted.'
             st.rerun()
         except db.DBError as exc:
@@ -144,13 +175,6 @@ def _manage_assignment(client, service, profile, a: dict, n_submissions: int) ->
 
 
 # ------------------------------------------------------------------ review queue
-
-
-@st.cache_data(ttl=600, max_entries=64, show_spinner=False)
-def _work_pages(_client, path: str) -> list[bytes]:
-    """A student's stored work as JPEG pages. Cached by path (stored files never change), so
-    reruns of the console do not download and re-render it again."""
-    return images.to_jpeg_pages(db.download(_client, BUCKET_SUBMISSIONS, path))
 
 
 def _review_tab(client, pending: list[dict], submissions: list[dict]) -> None:
@@ -178,23 +202,22 @@ def _review_tab(client, pending: list[dict], submissions: list[dict]) -> None:
                 )
 
 
-def _review_card(client, s: dict) -> None:
-    if s.get("flag_reason"):
+def _review_card(client, s: dict, key_prefix: str = "queue") -> None:
+    """One submission: why it was flagged, the student's work, the AI's marking, and the final-mark form.
+    ``key_prefix`` keeps widget keys unique when the same submission shows in two places."""
+    key = f"{key_prefix}_{s['id']}"
+    if s.get("flagged_for_review") and s.get("flag_reason"):
         alert("info", f"Reason: {s['flag_reason']}")
     st.caption(f"AI confidence in handwriting: {s['confidence_score']}%")
+
+    if st.toggle("Show student work", value=True, key=f"show_{key}"):
+        show_pages(client, BUCKET_SUBMISSIONS, s["student_work_paths"])
     st.markdown(s["ai_feedback"])
 
-    if st.toggle("Show student work", key=f"show_{s['id']}"):
-        for path in s["student_work_paths"]:
-            try:
-                for page in _work_pages(client, path):
-                    st.image(page, width="stretch")
-            except (db.DBError, images.ImageError) as exc:
-                alert("error", str(exc))
-
-    with st.form(f"resolve_{s['id']}"):
+    with st.form(f"resolve_{key}"):
         score = st.number_input(
-            "Final mark", min_value=0, max_value=max(s["score_total"], 0), value=min(s["score_awarded"], s["score_total"]), step=1
+            "Final mark", min_value=0, max_value=max(s["score_total"], 0),
+            value=min(effective_score(s)[0], s["score_total"]), step=1,
         )
         comment = st.text_area("Comment to the student (optional)", max_chars=2000)
         if st.form_submit_button("Save review →"):
