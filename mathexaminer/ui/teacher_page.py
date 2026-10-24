@@ -133,7 +133,8 @@ def _submission_list(client, subs: list[dict]) -> None:
             status = "awaiting review"
         else:
             status = "AI mark"
-        label = f"{s['student_name']} · {awarded}/{total} · {status} · {format_date(s['created_at'])}"
+        label = (f"{s['student_name']} · {awarded}/{total} · AI confidence {s['confidence_score']}% · {status}"
+                 f" · {format_date(s['created_at'])}")
         with st.expander(label):
             _review_card(client, {**s, "ai_feedback": feedback.get(s["id"], "")}, key_prefix="all")
 
@@ -187,7 +188,8 @@ def _review_tab(client, pending: list[dict], submissions: list[dict]) -> None:
         empty_state("✅", "Nothing waiting for review.")
     for s in pending:
         source = "Student flagged" if s["flag_source"] == "student" else "Flagged by AI (low confidence)"
-        label = f"{s['student_name']} · {s['assignment_title']} · AI {s['score_awarded']}/{s['score_total']} · {source}"
+        label = (f"{s['student_name']} · {s['assignment_title']} · AI {s['score_awarded']}/{s['score_total']}"
+                 f" · confidence {s['confidence_score']}% · {source}")
         with st.expander(label):
             _review_card(client, s)
 
@@ -210,7 +212,9 @@ def _review_card(client, s: dict, key_prefix: str = "queue") -> None:
         alert("info", f"Reason: {s['flag_reason']}")
     st.caption(f"AI confidence in handwriting: {s['confidence_score']}%")
 
-    if st.toggle("Show student work", value=True, key=f"show_{key}"):
+    if not s["student_work_paths"]:
+        st.caption("No pages were uploaded with this submission.")
+    elif st.toggle("Show student work", value=True, key=f"show_{key}"):
         show_pages(client, BUCKET_SUBMISSIONS, s["student_work_paths"])
     st.markdown(s["ai_feedback"])
 

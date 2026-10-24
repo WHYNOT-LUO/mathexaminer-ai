@@ -134,10 +134,11 @@ def test_wrong_login_shows_error(backend):
 
 def test_student_portal_lists_only_open_assignments(backend):
     backend.create_assignment(None, backend.TEACHER.user_id, "Second", "ms.png", b"x", "image/png")
-    backend.STORE.assignments[-1]["status"] = "closed"  # the seeded one
+    closed = backend.STORE.assignments[-1]  # a seeded one
+    closed["status"] = "closed"
     at = demo_app(backend, backend.STUDENTS["student-1"])
     assert not at.exception
-    assert at.selectbox[0].options == ["Second"]
+    assert "Second" in at.selectbox[0].options and closed["title"] not in at.selectbox[0].options
 
 
 def test_student_error_book_and_result_view(backend):
@@ -190,6 +191,10 @@ def test_student_can_dispute_a_grade(backend):
     assert row["flagged_for_review"] and row["flag_reason"] == "It misread my 2 as a 1."
 
 
+def pending(backend):
+    return sum(1 for s in backend.STORE.submissions if s["flagged_for_review"] and not s["resolved_at"])
+
+
 def flag_one(backend):
     target = backend.STORE.submissions[0]
     backend.flag_submission(None, target["id"], "Please check the last mark.")
@@ -199,11 +204,13 @@ def flag_one(backend):
 def test_teacher_console_renders_queue_and_analytics(backend):
     at = demo_app(backend, backend.TEACHER)
     assert not at.exception
-    assert [t.label for t in at.tabs][:3] == ["Assignments", "Review queue (1)", "Analytics"]
+    waiting = pending(backend)
+    assert waiting >= 1  # low-confidence gradings start in the queue
+    assert [t.label for t in at.tabs][:3] == ["Assignments", f"Review queue ({waiting})", "Analytics"]
     assert len(at.metric) >= 4
     flag_one(backend)
     at = demo_app(backend, backend.TEACHER)
-    assert [t.label for t in at.tabs][1] == "Review queue (2)"  # plus the low-confidence seeded answer
+    assert [t.label for t in at.tabs][1] == f"Review queue ({waiting + 1})"
 
 
 def test_teacher_can_resolve_a_flagged_submission(backend):
@@ -277,13 +284,37 @@ MARK_LINE = re.compile(r"\((\d+)/(\d+)\)")
 
 def test_every_seeded_marking_adds_up_to_its_score(backend):
     # the bug a visitor spotted: the mark-by-mark list must add up to the score shown
-    assert len(backend.STORE.submissions) == 3
+    assert len(backend.STORE.submissions) == 3 + 12  # the real samples and the example class
     for s in backend.STORE.submissions:
         marks = [(int(a), int(m)) for a, m in MARK_LINE.findall(s["ai_feedback"])]
         assert marks, s["student_name"]
         assert sum(a for a, _ in marks) == s["score_awarded"]
-        assert sum(m for _, m in marks) == s["score_total"] == 7  # the mark scheme is out of 7
+        out_of = 10 if s["assignment_title"] in backend.EXAMPLE_TITLES else 7  # the real scheme is out of 7
+        assert sum(m for _, m in marks) == s["score_total"] == out_of
         assert f"**{s['score_awarded']} / {s['score_total']} marks**" in s["ai_feedback"]
+
+
+def test_example_data_is_labelled_and_has_no_homework(backend):
+    examples = [s for s in backend.STORE.submissions if s["assignment_title"] in backend.EXAMPLE_TITLES]
+    assert len(examples) == 12
+    for s in examples:
+        assert not s["student_work_paths"]
+        assert "Example data" in s["ai_feedback"]
+    assert "example data" in backend.DEMO_NOTE
+    at = demo_app(backend, backend.TEACHER)
+    assert not at.exception
+    assert "No pages were uploaded with this submission." in [c.value for c in at.caption]
+
+
+def test_samples_are_not_marked_against_an_example_assignment(backend):
+    example = next(a for a in backend.STORE.assignments if a["title"] in backend.EXAMPLE_TITLES)
+    scheme = images.to_jpeg_pages(backend.STORE.files[example["mark_scheme_path"]])
+    pages = images.files_to_jpeg_pages([backend.ANSWERS["answer-strong.png"]])
+    with pytest.raises(deepseek.GradingError, match="example data"):
+        backend.fake_grade(None, scheme, pages)
+    real = backend.STORE.assignments[0]
+    scheme = images.to_jpeg_pages(backend.STORE.files[real["mark_scheme_path"]], max_pages=6)
+    assert backend.fake_grade(None, scheme, pages) is backend.RECORDED_BY_ANSWER["answer-strong.png"]
 
 
 def test_recorded_gradings_are_the_real_model_replies(backend):
@@ -310,7 +341,20 @@ def test_hard_to_read_answer_was_read_with_low_confidence_and_waits_for_the_teac
     assert seeded[0]["flag_reason"] == student_page.auto_flag_reason(result)
     at = demo_app(backend, backend.TEACHER)
     assert not at.exception
-    assert [t.label for t in at.tabs][1] == "Review queue (1)"
+    assert [t.label for t in at.tabs][1] == f"Review queue ({pending(backend)})"
+    assert any(e.label.startswith("Mia Rossi · Stationary points") and "confidence 52%" in e.label for e in at.expander)
+
+
+def test_confidence_shows_in_the_submissions_list_and_error_book(backend):
+    hard = next(s for s in backend.STORE.submissions if s["confidence_score"] == 52)
+    at = demo_app(backend, backend.TEACHER)
+    at.toggle(key=f"subs_{hard['assignment_id']}").set_value(True).run()
+    assert not at.exception
+    assert any(e.label.startswith("Mia Rossi · 7/7 · AI confidence 52%") for e in at.expander)
+    at = demo_app(backend, backend.STUDENTS["student-3"])
+    assert not at.exception
+    assert any(e.label.startswith("Stationary points of a cubic · 7/7") and "AI confidence 52%" in e.label
+               for e in at.expander)
 
 
 def test_grading_the_hard_to_read_sample_flags_it_for_the_teacher(backend):
@@ -347,15 +391,17 @@ def test_teacher_sees_every_students_work_and_marking(backend):
     labels = [e.label for e in at.expander]
     for name in ("Alex Chen", "Sam Patel", "Mia Rossi"):
         assert any(label.startswith(name) for label in labels)
-    # each student's homework and marking, plus the low-confidence one again in the review queue tab
-    assert all_markdown(at).count("Step-by-Step Marking") == 3 + 1
-    assert count_images(at) == 3 + 1
+    # each student's homework and marking, plus whatever waits in the review queue tab
+    queued = [s for s in backend.STORE.submissions if s["flagged_for_review"] and not s["resolved_at"]]
+    assert all_markdown(at).count("Step-by-Step Marking") == 3 + len(queued)
+    assert count_images(at) == 3 + sum(len(s["student_work_paths"]) for s in queued)
 
 
 def test_student_dispute_reaches_the_teacher_after_switching_accounts(backend):
     result = recorded(backend)
     student = backend.STUDENTS["student-1"]
     sid = submit(backend, student, result)
+    waiting = pending(backend)
     at = demo_app(backend, student, last_result=as_result_view(sid, result))
     at.text_area[0].set_value("I think my last line deserves the A1.")
     next(b for b in at.button if b.label == "Send to teacher →").click()
@@ -368,5 +414,5 @@ def test_student_dispute_reaches_the_teacher_after_switching_accounts(backend):
     at.button[0].click()
     at.run()
     assert not at.exception
-    assert [t.label for t in at.tabs][1] == "Review queue (2)"
+    assert [t.label for t in at.tabs][1] == f"Review queue ({waiting + 1})"
     assert "I think my last line deserves the A1." in all_markdown(at)

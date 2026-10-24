@@ -235,7 +235,9 @@ def _error_book_tab(client, profile) -> None:
         if picked and r["topic_tag"] not in picked:
             continue
         awarded, total = effective_score(r)
-        with st.expander(f"{r['assignment_title']} · {awarded}/{total} · {r['topic_tag']} · {format_date(r['created_at'])}"):
+        label = (f"{r['assignment_title']} · {awarded}/{total} · {r['topic_tag']} · "
+                 f"AI confidence {r['confidence_score']}% · {format_date(r['created_at'])}")
+        with st.expander(label):
             if r["key_takeaway"]:
                 takeaway_box(r["key_takeaway"], key=f"takeaway_{r['id']}")
             override_note(r)

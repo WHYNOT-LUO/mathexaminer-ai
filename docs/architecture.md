@@ -188,6 +188,8 @@ typed.
   demo replays those markings ([`demo/samples/recorded-gradings.json`](../demo/samples/recorded-gradings.json))
   instead of calling the AI, so it costs nothing to run and every score matches its marks. The
   "Hard to read" answer is a low-resolution copy of the photo, read with 52% confidence, so it
-  shows the automatic route to the review queue. It labels
+  shows the automatic route to the review queue. Two further assignments are made-up example data
+  (no homework photos, labelled "Example data"), so the class lists and charts look like a real class;
+  the demo will not replay the real marking against their placeholder mark schemes. It labels
   itself "Demo mode", refuses to pretend to mark anything else, and gives each visitor a private
   copy that carries over between the student and teacher accounts until the page is refreshed.

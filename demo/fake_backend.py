@@ -11,6 +11,7 @@ confidence, so it shows the automatic route to the teacher's review queue.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import time
 import uuid
@@ -19,6 +20,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import streamlit as st
+from PIL import Image, ImageDraw
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 from mathexaminer import db, deepseek, images
@@ -51,6 +53,100 @@ SEEDED = [("student-2", "answer-strong.png", 50), ("student-3", "answer-hard-to-
           ("student-1", "answer-typical-mistake.png", 3)]
 
 
+# Made-up example data that fills out the class around the real homework. These have no homework photos and
+# were never marked by the AI; every one says so. Each mark line is
+# (label, type, comment when awarded, comment when lost, takeaway when lost).
+EXAMPLE_SCHEMES = {
+    "Integration Test 1": ("Calculus", 9, [
+        ("1(a)", "M1", "Integrates each term, raising each power by one.",
+         "Differentiates instead of integrating.", "Integrating raises the power by one; differentiating lowers it."),
+        ("1(a)", "A1", "Correct antiderivative $x^3 + x^2 - 4x$.",
+         "Coefficient error in the antiderivative.", "Divide by the new power when you integrate each term."),
+        ("1(b)", "M1", "Substitutes both limits into the antiderivative and subtracts.",
+         "Substitutes only the upper limit.", "A definite integral is F(upper) minus F(lower), never F(upper) alone."),
+        ("1(b)", "A1", "Correct value $26$.",
+         "Arithmetic slip when evaluating $F(1) = -2$.", "Re-check the sign of F(lower) before subtracting it."),
+        ("2(a)", "B1", "Correct $\\int e^{2x}\\,dx = \\tfrac12 e^{2x} + c$.",
+         "Missing the factor $\\tfrac12$.", "Integrating e^(kx) divides by k."),
+        ("2(b)", "M1", "Uses the substitution $u = x^2 + 1$ with $du = 2x\\,dx$.",
+         "No valid substitution attempted.", "Look for a function and its derivative: that is the substitution."),
+        ("2(b)", "A1", "Correct result $\\tfrac12 \\ln(x^2 + 1) + c$.",
+         "Loses the factor $\\tfrac12$ from $du = 2x\\,dx$.", "Carry the constant from du through to the answer."),
+        ("3", "M1", "Sets up the area as $\\int_0^2 (4x - x^2)\\,dx$.",
+         "Uses the wrong limits for the area.", "Find where the curve meets the axis before choosing limits."),
+        ("3", "A1", "Correct antiderivative $2x^2 - \\tfrac13 x^3$.",
+         "Error integrating $x^2$.", "Integrating x^2 gives x^3/3, not x^3."),
+        ("3", "A1", "Correct area $\\tfrac{16}{3}$.",
+         "Final area evaluated incorrectly.", "Evaluate each limit separately, then subtract."),
+    ]),
+    "Trigonometric Identities": ("Trigonometry", 3, [
+        ("1", "M1", "Uses $\\sin^2\\theta + \\cos^2\\theta \\equiv 1$ to rewrite the numerator.",
+         "No use of a Pythagorean identity.", "Start an identity proof from sin² + cos² = 1."),
+        ("1", "A1", "Completes the proof that the expression is identical to $\\tan\\theta$.",
+         "Proof not completed to $\\tan\\theta$.", "End an identity proof by reaching exactly the other side."),
+        ("2(a)", "M1", "Rewrites $2\\cos^2 x - \\sin x - 1 = 0$ as a quadratic in $\\sin x$.",
+         "Does not form a quadratic in one function.", "Replace cos² x by 1 - sin² x to get one function."),
+        ("2(a)", "A1", "Correct roots $\\sin x = \\tfrac12$ and $\\sin x = -1$.",
+         "Factorises the quadratic incorrectly.", "Check a factorisation by expanding it back."),
+        ("2(b)", "A1", "Finds $x = 30^\\circ$ and $150^\\circ$.",
+         "Gives only $x = 30^\\circ$.", "sin x = k has two solutions in 0°-360°: x and 180° - x."),
+        ("2(b)", "A1", "Finds $x = 270^\\circ$ from $\\sin x = -1$.",
+         "Misses the solution from $\\sin x = -1$.", "Solve every root of the quadratic, not just the first."),
+        ("3(a)", "M1", "Expands $\\cos(x + 60^\\circ)$ with the compound-angle formula.",
+         "Uses $\\cos(A + B) = \\cos A + \\cos B$.", "cos(A + B) = cos A cos B - sin A sin B."),
+        ("3(a)", "A1", "Correct $\\tfrac12 \\cos x - \\tfrac{\\sqrt3}{2} \\sin x$.",
+         "Sign error in the compound-angle expansion.", "The cos(A + B) expansion has a minus sign."),
+        ("3(b)", "M1", "Uses $\\tan 2A = \\dfrac{2\\tan A}{1 - \\tan^2 A}$ with $\\tan A = \\tfrac13$.",
+         "Doubles $\\tan A$ instead of using the double-angle formula.", "tan 2A is not 2 tan A."),
+        ("3(b)", "A1", "Correct $\\tan 2A = \\tfrac34$.",
+         "Arithmetic error simplifying the fraction.", "Simplify 1 - 1/9 = 8/9 before dividing."),
+    ]),
+}
+EXAMPLE_TITLES = set(EXAMPLE_SCHEMES)
+# (assignment, student, marks awarded out of 10, AI confidence, hours ago, whether the student disputed it)
+EXAMPLES = [
+    ("Integration Test 1", "student-2", 9, 93, 200, False),
+    ("Integration Test 1", "student-3", 5, 81, 196, False),
+    ("Integration Test 1", "student-1", 8, 88, 190, False),
+    ("Integration Test 1", "student-2", 10, 96, 185, False),
+    ("Integration Test 1", "student-3", 4, 48, 180, False),
+    ("Integration Test 1", "student-1", 7, 72, 170, False),
+    ("Trigonometric Identities", "student-1", 6, 90, 60, True),
+    ("Trigonometric Identities", "student-2", 8, 93, 55, False),
+    ("Trigonometric Identities", "student-3", 3, 55, 50, False),
+    ("Trigonometric Identities", "student-2", 9, 88, 40, False),
+    ("Trigonometric Identities", "student-1", 5, 81, 30, False),
+    ("Trigonometric Identities", "student-3", 7, 72, 20, False),
+]
+
+
+def example_result(title: str, awarded: int, confidence: int, seed: int) -> GradingResult:
+    """A made-up marking for an example assignment whose mark lines add up to ``awarded``.
+    Accuracy marks are lost before method marks, as on a real script."""
+    topic, _days, lines = EXAMPLE_SCHEMES[title]
+    order = sorted(range(len(lines)), key=lambda i: (lines[i][1] == "M1", (i * 7 + seed * 3) % len(lines)))
+    lost = set(order[: len(lines) - awarded])
+    marks = [{"label": label, "mark_type": kind, "max_marks": 1, "awarded": int(i not in lost),
+              "comment": lost_comment if i in lost else ok_comment}
+             for i, (label, kind, ok_comment, lost_comment, _tip) in enumerate(lines)]
+    tips = [lines[i][4] for i in sorted(lost)]
+    return GradingResult.from_model_json({
+        "marks": marks,
+        "summary": "Example data: made up to fill out the demo class, with no homework photo and no AI marking.",
+        "topic": topic,
+        "key_takeaway": tips[0] if tips else "Full marks: keep setting out every step this clearly.",
+        "handwriting_confidence": confidence,
+    })
+
+
+def _placeholder_scheme(title: str) -> bytes:
+    img = Image.new("RGB", (800, 300), (252, 251, 247))
+    ImageDraw.Draw(img).text((30, 30), f"{title}: example mark scheme (demo data, not a real paper)", fill=(15, 27, 45))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
 def _page_key(page: bytes) -> str:
     return hashlib.sha256(page).hexdigest()
 
@@ -68,6 +164,8 @@ def _load_samples() -> tuple[dict[str, bytes], dict[str, GradingResult], dict[st
 
 
 ANSWERS, RECORDED, RECORDED_BY_ANSWER = _load_samples()
+# The first page of the real mark scheme, as the grader receives it: only that assignment can be marked.
+REAL_SCHEME_KEY = _page_key(images.to_jpeg_pages((SAMPLES / "mark-scheme.pdf").read_bytes())[0])
 
 
 class _Store:
@@ -98,6 +196,23 @@ class _Store:
                 self._row(assignment, STUDENTS[student_id], result, [path], _now() - timedelta(hours=hours_ago),
                           student_page.auto_flag_reason(result))
             )
+        examples = {}
+        for title, (_topic, days, _lines) in EXAMPLE_SCHEMES.items():
+            examples[title] = {
+                "id": str(uuid.uuid4()), "teacher_id": TEACHER.user_id, "title": title, "status": "active",
+                "mark_scheme_path": self._put(TEACHER.user_id, "mark-scheme.png", _placeholder_scheme(title)),
+                "question_path": None, "created_at": _iso(_now() - timedelta(days=days)),
+            }
+            self.assignments.append(examples[title])
+        for seed, (title, student_id, awarded, confidence, hours_ago, disputed) in enumerate(EXAMPLES):
+            result = example_result(title, awarded, confidence, seed)
+            row = self._row(examples[title], STUDENTS[student_id], result, [], _now() - timedelta(hours=hours_ago),
+                            student_page.auto_flag_reason(result))
+            if disputed:
+                first_lost = next(m for m in result.marks if m.awarded < m.max_marks)
+                row.update(flagged_for_review=True, flag_source="student", flagged_at=row["created_at"],
+                           flag_reason=f"I think question {first_lost.label} deserves the {first_lost.mark_type}.")
+            self.submissions.append(row)
 
     def _row(self, assignment, student, result, paths, when, flag_reason=None) -> dict:
         return {
@@ -133,8 +248,9 @@ def _store() -> _Store:
 
 
 DEMO_NOTE = (
-    "Demo mode: the homework and its marking are real, recorded from the AI on 24 Oct 2026; the demo "
-    "replays them instead of calling the AI. What you do stays when you switch between the student and "
+    f'Demo mode: "{ASSIGNMENT_TITLE}" is real homework, marked by the AI on 24 Oct 2026; the demo replays '
+    "that marking instead of calling the AI. The other assignments are made-up example data, with no "
+    "homework photos, to fill out the class. What you do stays when you switch between the student and "
     "teacher accounts. Refresh the page to start over."
 )
 _real_welcome_banner = components.welcome_banner
@@ -153,6 +269,10 @@ def _auth_render_with_hint(client):
 
 # ---- deepseek ---------------------------------------------------------------
 
+NOT_AN_EXAMPLE_TO_MARK = (
+    f'This assignment is made-up example data, so the demo cannot mark work for it. Choose "{ASSIGNMENT_TITLE}" '
+    "to grade a sample answer."
+)
 NOT_A_SAMPLE = (
     "The demo only marks the three sample answers: it replays the marking the real AI gave them. "
     "Pick one of the sample answers, or run the real app to have your own work marked."
@@ -164,6 +284,8 @@ MARKING_DELAY_S = 2.5  # long enough to see the "marking" step; a real grading t
 
 def fake_grade(settings, scheme_pages, student_pages, **_kwargs) -> GradingResult:
     time.sleep(MARKING_DELAY_S)
+    if scheme_pages and _page_key(scheme_pages[0]) != REAL_SCHEME_KEY:
+        raise deepseek.GradingError(NOT_AN_EXAMPLE_TO_MARK)
     result = RECORDED.get(_page_key(student_pages[0])) if student_pages else None
     if result is None:
         raise deepseek.GradingError(NOT_A_SAMPLE)
