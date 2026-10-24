@@ -73,6 +73,8 @@ create index if not exists grading_attempts_student_created_idx
 
 create index if not exists submissions_student_created_idx on public.submissions (student_id, created_at desc);
 create index if not exists submissions_assignment_idx      on public.submissions (assignment_id);
+-- Lets the storage policy find which submission a work file belongs to without scanning every row.
+create index if not exists submissions_work_paths_idx      on public.submissions using gin (student_work_paths);
 create index if not exists submissions_open_flags_idx      on public.submissions (assignment_id)
     where flagged_for_review and resolved_at is null;
 
@@ -84,6 +86,24 @@ language sql stable security definer set search_path = public
 as $$
     select exists (select 1 from public.users where id = auth.uid() and role = 'teacher');
 $$;
+
+-- True if the signed-in teacher owns the assignment that a stored work file was submitted to.
+-- Used by the storage policy below, so a teacher can open only their own students' work.
+create or replace function public.teacher_can_read_work(p_path text)
+returns boolean
+language sql stable security definer set search_path = public
+as $$
+    select exists (
+        select 1
+          from public.submissions s
+          join public.assignments a on a.id = s.assignment_id
+         where a.teacher_id = auth.uid()
+           and s.student_work_paths @> array[p_path]
+    );
+$$;
+
+revoke all on function public.teacher_can_read_work(text) from public, anon;
+grant execute on function public.teacher_can_read_work(text) to authenticated;
 
 -- Create the profile row when someone signs up. The role comes from a server-side code
 -- check, so a client cannot simply claim to be a teacher.
@@ -239,12 +259,15 @@ create policy markschemes_delete on storage.objects
     for delete to authenticated
     using (bucket_id = 'markschemes' and (storage.foldername(name))[1] = auth.uid()::text);
 
--- Student work: files live under "<student_id>/<uuid>.<ext>". Owner reads/writes; teachers read.
+-- Student work: files live under "<student_id>/<uuid>.<ext>". The student reads and writes their
+-- own folder; a teacher can read a file only if it belongs to a submission for one of their own
+-- assignments (earlier versions let any teacher read every student's files).
 drop policy if exists submissions_files_read on storage.objects;
 create policy submissions_files_read on storage.objects
     for select to authenticated
     using (bucket_id = 'submissions'
-           and ((storage.foldername(name))[1] = auth.uid()::text or public.is_teacher()));
+           and ((storage.foldername(name))[1] = auth.uid()::text
+                or public.teacher_can_read_work(name)));
 
 drop policy if exists submissions_files_write on storage.objects;
 create policy submissions_files_write on storage.objects

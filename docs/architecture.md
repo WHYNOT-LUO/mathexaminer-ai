@@ -138,7 +138,7 @@ user can see and change. The app's own checks are a convenience on top, not the 
 | `submissions` | Read own; flag or dispute own (through a database function) | Read those for own assignments; set the final mark (through a database function, 0 to the total) | The only way a submission is created |
 | `grading_attempts` | No access | No access | Records and counts the allowance |
 | Mark scheme files | No access | Read, upload and delete own | Downloads them to grade |
-| Student work files | Read, upload and delete own | Read (see [Known limitations](../README.md#known-limitations)) | Deletes them when their assignment is deleted |
+| Student work files | Read, upload and delete own | Read files submitted to own assignments | Deletes them when their assignment is deleted |
 
 The role is set when an account is created: a database trigger makes the account a teacher only if
 the sign-up included a code that exists in `teacher_codes`. A user cannot change their own role.

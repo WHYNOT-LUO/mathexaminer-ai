@@ -226,7 +226,7 @@ docs/                      Architecture notes, screenshots, the optional Cloudfl
 - **Roles cannot be self-assigned.** An account becomes a teacher only if it signs up with a valid teacher code, checked inside the database.
 - **Scores come only from the grader.** Students have no permission to create or edit submissions. The server saves each result, and a teacher's override is the only way a mark changes.
 - **Students cannot download mark schemes.** The server fetches them to grade.
-- **Files are private.** Mark schemes and student work are in private storage, never publicly linked.
+- **Files are private.** Mark schemes and student work are in private storage, never publicly linked. A teacher can open a student's work only if it was submitted to one of that teacher's assignments.
 - **Secrets stay on the server.** Streamlit runs the Python on the server; keys never reach the browser, and error messages never include them.
 - **Uploaded images are treated as untrusted.** The AI is told to ignore instructions written inside them, and every piece of text shown on screen is escaped.
 
@@ -236,7 +236,7 @@ The full access table is in [docs/architecture.md](docs/architecture.md#access-c
 
 - **AI marking can be wrong.** Handwriting confidence is the AI's own estimate of how well it read the writing, not proof the marking is right. That is why the review queue exists, and why the analytics show where to double-check.
 - **The 60% review threshold is a starting point**, not a measured value. Comparing the AI's marks with teachers' final marks would show where it should be.
-- **No classes yet.** Every student sees every open assignment, and any teacher can read the stored work files of any student, not only those for their own assignments.
+- **No classes yet.** Every student sees every open assignment, and every teacher can see the list of all users' names.
 - **No deadlines or notifications.** Teachers check the review queue themselves.
 - **The feedback reveals the mark scheme's approach** once work is submitted, so this is for practice and homework, not unseen exams.
 - **Signing in lasts for one browser tab.** Refreshing the page signs you out.
@@ -271,7 +271,7 @@ tested it with real handwriting. Much of the code was written with AI coding ass
 
 ## Roadmap
 
-- Classes and enrolment, so students see only their own class's assignments and teachers only their own students' work.
+- Classes and enrolment, so students see only their own class's assignments and teachers only their own students.
 - Deadlines and email notifications for flagged work.
 - A measured accuracy check: compare the AI's marks with teachers' final marks, and use the result to set the review threshold.
 - An error catalogue: record which known mistake caused each lost mark, so teachers can see which misunderstandings come up most.
