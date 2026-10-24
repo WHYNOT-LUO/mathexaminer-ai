@@ -124,6 +124,13 @@ def _submit_tab(client, service, profile, settings: Settings) -> None:
         alert("error", err)
 
 
+def auto_flag_reason(result) -> str | None:
+    """Why a result goes straight to the teacher, or None if the AI read the handwriting confidently."""
+    if result.confidence < LOW_CONFIDENCE_THRESHOLD:
+        return f"AI handwriting confidence {result.confidence}% is below {LOW_CONFIDENCE_THRESHOLD}%."
+    return None
+
+
 def _grade(client, service, profile, settings: Settings, assignment: dict, files, pages: list[bytes]) -> None:
     try:
         with st.spinner("Reading the mark scheme and marking your work - this usually takes under a minute…"):
@@ -134,11 +141,7 @@ def _grade(client, service, profile, settings: Settings, assignment: dict, files
             paths = db.upload_student_work(
                 client, profile.user_id, [(f.name, f.getvalue(), f.type) for f in files]
             )
-            flag_reason = (
-                f"AI handwriting confidence {result.confidence}% is below {LOW_CONFIDENCE_THRESHOLD}%."
-                if result.confidence < LOW_CONFIDENCE_THRESHOLD
-                else None
-            )
+            flag_reason = auto_flag_reason(result)
             submission_id = db.save_submission(
                 service, assignment["id"], profile.user_id, paths, result, auto_flag_reason=flag_reason
             )

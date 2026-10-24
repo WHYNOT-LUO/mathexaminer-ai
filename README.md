@@ -19,6 +19,8 @@ a teacher, who makes the final call.
 > needed. The homework in the demo is real: a question, its mark scheme and three handwritten answers,
 > each graded once by the real AI. The demo replays those recorded markings instead of calling the AI.
 > Try a sample answer as the student, dispute the mark, then sign in as the teacher to review it.
+> The "Hard to read" answer is a blurry photo the AI could not read confidently, so it goes to the
+> teacher's review queue on its own.
 
 ## Contents
 
@@ -93,7 +95,7 @@ the student names are made up.*
 - **The program does the arithmetic.** The AI returns one entry per mark; the app checks each entry and adds up the total itself.
 - **Access is enforced by the database**, through row-level security, not just hidden in the interface.
 - **Costs are capped:** each student has a grading allowance per 24 hours, and every grading has a time limit.
-- **102 automated tests** run on every push, on Python 3.10 and 3.12.
+- **104 automated tests** run on every push, on Python 3.10 and 3.12.
 
 ### Measured speed and cost
 
@@ -103,9 +105,13 @@ Grading the three real sample answers with `deepseek-flash` (October 2026):
 |---|---|---|---|---|---|
 | Strong | 7/7 | 92% | 2,544 / 656 | 12 s | $0.0008–$0.0016 |
 | Typical mistake (maximum and minimum swapped) | 6/7 | 88% | 2,034 / 718 | 8 s | $0.0005–$0.0011 |
-| Hard to read | 7/7 | 85% | 2,052 / 1,526 | 12 s | $0.0010–$0.0020 |
+| Hard to read (full-resolution photo) | 7/7 | 85% | 2,052 / 1,526 | 12 s | $0.0010–$0.0020 |
+| Hard to read (low-resolution copy, used in the demo) | 7/7 | 52% (sent to the teacher) | 1,787 / 2,518 | 14 s | $0.0016–$0.0031 |
 
-That is about 0.05 to 0.2 US cents per grading; the range is DeepSeek's off-peak and peak prices.
+That is about 0.05 to 0.3 US cents per grading; the range is DeepSeek's off-peak and peak prices.
+The AI read my messy handwriting with 85% confidence, above the 60% line. To show what happens when it
+cannot read the work, the demo uses a low-resolution copy of the same photo: the AI still gave the right
+marks but reported only 52% confidence, so the app sent the work to the teacher to check.
 The marking replies themselves are in [`demo/samples/recorded-gradings.json`](demo/samples/recorded-gradings.json).
 
 ## How it works
@@ -198,7 +204,7 @@ Set these in `.streamlit/secrets.toml` or as environment variables.
 
 ```bash
 pip install -r requirements-dev.txt
-pytest       # 102 tests
+pytest       # 104 tests
 ruff check .
 ```
 
@@ -206,7 +212,7 @@ ruff check .
 |---|---|---|
 | `test_models.py` | 19 | Totals computed from the marks, clamping, unknown topics, bad numbers from the AI |
 | `test_deepseek.py` | 25 | The request sent to DeepSeek, the retry at low effort, time limits, friendly error messages that never contain the API key |
-| `test_app.py` | 25 | The real interface driven with Streamlit's `AppTest`: log in, grading a sample answer, the question sheet, the Error Book, dispute, teacher review and the submissions list, deleting an assignment, attempts to inject HTML, demo isolation; and that every demo marking adds up to its score |
+| `test_app.py` | 27 | The real interface driven with Streamlit's `AppTest`: log in, grading a sample answer (including the low-confidence one going to the teacher), the question sheet, the Error Book, dispute, teacher review and the submissions list, deleting an assignment, attempts to inject HTML, demo isolation; and that every demo marking adds up to its score |
 | `test_images.py` | 16 | Rotation, transparency, PDFs, page and size limits, oversized "decompression bomb" images |
 | `test_db.py` | 11 | The grading allowance, server-side saving with flags, closed assignments, question sheets, file clean-up |
 | `test_config.py` | 6 | Missing or invalid settings, and the service key not being the anon key |

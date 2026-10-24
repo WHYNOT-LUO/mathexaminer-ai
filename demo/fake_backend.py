@@ -4,6 +4,8 @@ It mirrors the public functions of ``mathexaminer.db`` (a test enforces matching
 The homework in ``samples/`` is real: a question, a mark scheme and three handwritten answers,
 each graded once by the real grader (``samples/recorded-gradings.json``). Instead of calling the
 AI, ``fake_grade`` replays the recorded marking for whichever sample answer was submitted.
+The hard-to-read answer is a low-resolution copy of the photo, which the AI read with low
+confidence, so it shows the automatic route to the teacher's review queue.
 """
 
 from __future__ import annotations
@@ -92,8 +94,9 @@ class _Store:
         for student_id, answer, hours_ago in SEEDED:
             path = self._put(student_id, answer, ANSWERS[answer])
             result = RECORDED_BY_ANSWER[answer]
-            self.submissions.append(
-                self._row(assignment, STUDENTS[student_id], result, [path], _now() - timedelta(hours=hours_ago))
+            self.submissions.append(  # flagged just as the real app would flag a low-confidence result
+                self._row(assignment, STUDENTS[student_id], result, [path], _now() - timedelta(hours=hours_ago),
+                          student_page.auto_flag_reason(result))
             )
 
     def _row(self, assignment, student, result, paths, when, flag_reason=None) -> dict:

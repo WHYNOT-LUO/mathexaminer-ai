@@ -186,6 +186,8 @@ typed.
 - **A demo built from real work.** The hosted demo runs the real interface on a real question,
   mark scheme and three handwritten answers. Each answer was graded once by the real grader, and the
   demo replays those markings ([`demo/samples/recorded-gradings.json`](../demo/samples/recorded-gradings.json))
-  instead of calling the AI, so it costs nothing to run and every score matches its marks. It labels
+  instead of calling the AI, so it costs nothing to run and every score matches its marks. The
+  "Hard to read" answer is a low-resolution copy of the photo, read with 52% confidence, so it
+  shows the automatic route to the review queue. It labels
   itself "Demo mode", refuses to pretend to mark anything else, and gives each visitor a private
   copy that carries over between the student and teacher accounts until the page is refreshed.

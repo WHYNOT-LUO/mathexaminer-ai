@@ -199,11 +199,11 @@ def flag_one(backend):
 def test_teacher_console_renders_queue_and_analytics(backend):
     at = demo_app(backend, backend.TEACHER)
     assert not at.exception
-    assert [t.label for t in at.tabs][:3] == ["Assignments", "Review queue", "Analytics"]
+    assert [t.label for t in at.tabs][:3] == ["Assignments", "Review queue (1)", "Analytics"]
     assert len(at.metric) >= 4
     flag_one(backend)
     at = demo_app(backend, backend.TEACHER)
-    assert [t.label for t in at.tabs][1] == "Review queue (1)"
+    assert [t.label for t in at.tabs][1] == "Review queue (2)"  # plus the low-confidence seeded answer
 
 
 def test_teacher_can_resolve_a_flagged_submission(backend):
@@ -302,6 +302,26 @@ def test_fake_grade_replays_samples_and_refuses_other_work(backend):
         backend.fake_grade(None, [], [other])
 
 
+def test_hard_to_read_answer_was_read_with_low_confidence_and_waits_for_the_teacher(backend):
+    result = recorded(backend, "answer-hard-to-read.png")
+    assert result.confidence < student_page.LOW_CONFIDENCE_THRESHOLD
+    seeded = [s for s in backend.STORE.submissions if s["confidence_score"] == result.confidence]
+    assert len(seeded) == 1 and seeded[0]["flagged_for_review"] and seeded[0]["flag_source"] == "ai"
+    assert seeded[0]["flag_reason"] == student_page.auto_flag_reason(result)
+    at = demo_app(backend, backend.TEACHER)
+    assert not at.exception
+    assert [t.label for t in at.tabs][1] == "Review queue (1)"
+
+
+def test_grading_the_hard_to_read_sample_flags_it_for_the_teacher(backend):
+    at = demo_app(backend, backend.STUDENTS["student-1"])
+    at.button(key="sample_2").click().run()  # "Hard to read"
+    at.button(key="grade_btn").click().run()
+    assert not at.exception
+    assert at.session_state["last_result"]["auto_flagged"]
+    assert "was not sure it read your handwriting" in all_markdown(at)
+
+
 def test_student_grades_a_sample_answer_end_to_end(backend):
     at = demo_app(backend, backend.STUDENTS["student-1"])
     assert not at.exception
@@ -327,8 +347,9 @@ def test_teacher_sees_every_students_work_and_marking(backend):
     labels = [e.label for e in at.expander]
     for name in ("Alex Chen", "Sam Patel", "Mia Rossi"):
         assert any(label.startswith(name) for label in labels)
-    assert all_markdown(at).count("Step-by-Step Marking") == 3
-    assert count_images(at) == 3  # each student's homework
+    # each student's homework and marking, plus the low-confidence one again in the review queue tab
+    assert all_markdown(at).count("Step-by-Step Marking") == 3 + 1
+    assert count_images(at) == 3 + 1
 
 
 def test_student_dispute_reaches_the_teacher_after_switching_accounts(backend):
@@ -347,5 +368,5 @@ def test_student_dispute_reaches_the_teacher_after_switching_accounts(backend):
     at.button[0].click()
     at.run()
     assert not at.exception
-    assert [t.label for t in at.tabs][1] == "Review queue (1)"
+    assert [t.label for t in at.tabs][1] == "Review queue (2)"
     assert "I think my last line deserves the A1." in all_markdown(at)

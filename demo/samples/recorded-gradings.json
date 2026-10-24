@@ -1,6 +1,6 @@
 {
   "recorded_on": "2026-10-24",
-  "how": "Each answer was graded once by mathexaminer.deepseek against mark-scheme.pdf; this is the model's raw JSON reply.",
+  "how": "Each answer was graded once by mathexaminer.deepseek against mark-scheme.pdf; this is the model's raw JSON reply. answer-hard-to-read.png is a low-resolution copy of the original photo, made to show what happens when the AI cannot read the work clearly (the full-resolution photo was read with 85% confidence).",
   "gradings": [
     {
       "answer": "answer-strong.png",
@@ -144,12 +144,12 @@
       "answer": "answer-hard-to-read.png",
       "model": "deepseek-flash",
       "reasoning_effort": "high",
-      "seconds": 11.8,
+      "seconds": 13.8,
       "usage": {
-        "prompt_tokens": 2052,
-        "completion_tokens": 1526,
+        "prompt_tokens": 1787,
+        "completion_tokens": 2518,
         "prompt_cache_hit_tokens": 1408,
-        "prompt_cache_miss_tokens": 644
+        "prompt_cache_miss_tokens": 379
       },
       "reply": {
         "marks": [
@@ -157,56 +157,56 @@
             "label": "1",
             "mark_type": "M1",
             "max_marks": 1,
-            "comment": "Correctly differentiates $y$ to obtain $\\frac{dy}{dx}$ using the power rule.",
+            "comment": "Differentiates the cubic to obtain $\\frac{dy}{dx}=3x^2-12x+9$.",
             "awarded": 1
           },
           {
             "label": "1",
             "mark_type": "A1",
             "max_marks": 1,
-            "comment": "Derivative $\\frac{dy}{dx}=3x^2-12x+9$ is correct.",
+            "comment": "The derivative $\\frac{dy}{dx}=3x^2-12x+9$ is correct.",
             "awarded": 1
           },
           {
             "label": "1",
             "mark_type": "M1",
             "max_marks": 1,
-            "comment": "Sets $\\frac{dy}{dx}=0$ and solves the quadratic $x^2-4x+3=0$.",
+            "comment": "Sets $3x^2-12x+9=0$ and solves the resulting quadratic.",
             "awarded": 1
           },
           {
             "label": "1",
             "mark_type": "A1",
             "max_marks": 1,
-            "comment": "Correct $x$-coordinates $x=1$ and $x=3$.",
+            "comment": "Correctly obtains $x=1$ and $x=3$.",
             "awarded": 1
           },
           {
             "label": "1",
             "mark_type": "A1",
             "max_marks": 1,
-            "comment": "Correct $y$-coordinates, computing $y=6$ at $x=1$ and $y=2$ at $x=3$.",
+            "comment": "Substitutes into the original equation and obtains $y=6$ at $x=1$ and $y=2$ at $x=3$.",
             "awarded": 1
           },
           {
             "label": "1",
             "mark_type": "M1",
             "max_marks": 1,
-            "comment": "Uses the second derivative $\\frac{d^2y}{dx^2}=6x-12$ to test nature.",
+            "comment": "Uses the second derivative/sign test to determine the nature of each stationary point.",
             "awarded": 1
           },
           {
             "label": "1",
             "mark_type": "A1",
             "max_marks": 1,
-            "comment": "Correct conclusion: maximum at $(1,6)$ (second derivative $-6$) and minimum at $(3,2)$ (second derivative $6$).",
+            "comment": "Concludes maximum at $(1,6)$ and minimum at $(3,2)$; both points are required and are present.",
             "awarded": 1
           }
         ],
-        "summary": "The student produced a complete, fully correct solution: correct derivative, correct solution of the stationary equation, correct coordinates, and a valid second-derivative test with the right nature for each point. All 7 marks are awarded.",
+        "summary": "The student gives a complete, correct solution: correct differentiation, correct solution of the stationary-point equation, correct y-coordinates, and a valid second-derivative test classifying both points. Full marks are awarded.",
         "topic": "Calculus",
-        "key_takeaway": "Keep showing the second-derivative substitution value alongside each conclusion; this fully justifies the maximum/minimum classification.",
-        "handwriting_confidence": 85
+        "key_takeaway": "Keep showing the second-derivative/sign test explicitly and state both coordinates in the final classification.",
+        "handwriting_confidence": 52
       }
     }
   ]
