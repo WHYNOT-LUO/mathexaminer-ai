@@ -16,8 +16,8 @@ from playwright.sync_api import sync_playwright
 URL = "https://mathexaminer-ai-demo.streamlit.app/"
 WAKE_BUTTON = "Yes, get this app back up!"
 READY_TEXT = "CIE A-Level"  # tagline on the app's login screen
-TIMEOUT_S = 300
-RELOAD_AFTER_S = 60  # a stalled spinner is reloaded after this long (not while a woken app starts)
+TIMEOUT_S = 540  # a cold start on Community Cloud can take several minutes; the job limit is 15
+RELOAD_AFTER_S = 90  # a stalled spinner is reloaded after this long (not while a woken app starts)
 
 
 def app_is_ready(page) -> bool:
@@ -53,7 +53,7 @@ def main() -> int:
                 woke = True
             elif not woke and time.monotonic() - loaded_at > RELOAD_AFTER_S:
                 print("page stalled while loading; reloading")
-                page.reload(wait_until="domcontentloaded", timeout=120_000)
+                page.reload(wait_until="domcontentloaded", timeout=60_000)
                 loaded_at = time.monotonic()
                 reloads += 1
             page.wait_for_timeout(5000)
