@@ -3,7 +3,7 @@
 [![CI](https://github.com/WHYNOT-LUO/mathexaminer-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/WHYNOT-LUO/mathexaminer-ai/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-[![Open the live demo](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://mathexaminer-ai-demo.streamlit.app)
+[![Live demo](https://img.shields.io/badge/live%20demo-open-1B3A6B)](https://mathexaminer-ai-demo.onrender.com)
 
 **AI marking of handwritten CIE A-Level Mathematics, the way an examiner marks it, with a teacher in
 control.**
@@ -14,7 +14,9 @@ each, so a student who uses the right method but slips on the arithmetic still e
 When the AI is not sure it read the handwriting, or a student disagrees with a mark, the work goes to
 a teacher, who makes the final call.
 
-> **Try it now: [mathexaminer-ai-demo.streamlit.app](https://mathexaminer-ai-demo.streamlit.app)**
+> **Try it now: [mathexaminer-ai-demo.onrender.com](https://mathexaminer-ai-demo.onrender.com)**
+> (if no one has used it for a while, the first visit takes about a minute to wake up; the same demo
+> also runs at [mathexaminer-ai-demo.streamlit.app](https://mathexaminer-ai-demo.streamlit.app)).
 > Log in as `student@demo.school` or `teacher@demo.school` with any password. No sign-up or keys
 > needed. The assignment "Stationary points of a cubic" is real: a question, its mark scheme and three
 > handwritten answers, each graded once by the real AI. The demo replays those recorded markings instead
@@ -183,10 +185,19 @@ streamlit run app.py
 
 ### Deploying
 
-On [Streamlit Community Cloud](https://streamlit.io/cloud), point a new app at this repository:
+The public demo needs no secrets. It runs in two places:
 
-- **The public demo:** use `demo/demo_app.py` as the main file. It needs no secrets.
-- **The real app:** use `app.py` and paste the same keys into the app's **Secrets** settings.
+- **[Render](https://render.com)** (the main link): **New → Blueprint** on this repository reads
+  [`render.yaml`](render.yaml). The free plan sleeps after 15 minutes without visitors and wakes in
+  about a minute.
+- **[Streamlit Community Cloud](https://streamlit.io/cloud):** a new app with `demo/demo_app.py` as the
+  main file. Since 3 November 2026 Community Cloud has been dropping about one request in six to this
+  account's apps (a one-line app fails the same way), so first visits there often stall; the problem
+  is reported to Streamlit.
+
+Both install the exact versions in [`demo/requirements.txt`](demo/requirements.txt), so a new release
+of a library cannot change the demo by surprise. For the real app, deploy `app.py` on Community Cloud
+(or any host that runs Streamlit) and paste the same keys into its **Secrets** settings.
 
 ## Configuration
 
@@ -223,8 +234,8 @@ The AI and the database are replaced by fakes in the tests, so they need no keys
 contract test checks that the demo backend has exactly the same functions as the real data layer.
 
 GitHub Actions runs `ruff` and `pytest` on every push ([`ci.yml`](.github/workflows/ci.yml)). A second
-workflow ([`keep-demo-awake.yml`](.github/workflows/keep-demo-awake.yml)) visits the hosted demo every
-6 hours so Streamlit Community Cloud does not put it to sleep.
+workflow ([`keep-demo-awake.yml`](.github/workflows/keep-demo-awake.yml)) visits both hosted copies of
+the demo every 6 hours, so they are less often asleep, and fails if the Render copy does not load.
 
 ## Project layout
 
@@ -240,6 +251,9 @@ mathexaminer/
 supabase/schema.sql        Tables, row-level security, storage rules and database functions
 demo/                      In-memory backend, so the interface runs with no accounts or keys
   samples/                 The real question, mark scheme, three handwritten answers and their recorded markings
+  requirements.txt         Exact library versions for the hosted demo
+  backup_app.py            Second entry point (Community Cloud allows one app per main file)
+render.yaml                Render Blueprint for the hosted demo
 tests/                     pytest suite
 docs/                      Architecture notes, screenshots, the optional Cloudflare relay, the original design sketch
 .github/                   CI and the keep-the-demo-awake workflow

@@ -1,11 +1,14 @@
-"""Visit the hosted demo so Streamlit Community Cloud does not put it to sleep.
+"""Visit both hosted copies of the demo so they stay awake, and check that they load.
 
-Community Cloud hibernates any app without traffic for 12 hours; a visitor then sees a
-"Yes, get this app back up!" button and waits for a cold start. A real browser visit counts as
-traffic, so this runs on a schedule (.github/workflows/keep-demo-awake.yml). If the demo is
-already asleep it presses the button. Streamlit's page sometimes stalls on its loading spinner, so
-the page is reloaded if nothing has changed for a while, as a person would. It fails if the login
-screen never appears, so a broken demo shows up as a failed workflow run.
+The demo runs on Render (the main link) and on Streamlit Community Cloud. Both put a free app to
+sleep after a while without traffic; a real browser visit counts as traffic, so this runs on a
+schedule (.github/workflows/keep-demo-awake.yml). On Streamlit it presses the "Yes, get this app
+back up!" button if the app is asleep, and since Streamlit's page sometimes stalls on its loading
+spinner, a stalled page is reloaded as a person would.
+
+The run fails only if the Render copy does not show its login screen, so a failed workflow run
+means the main demo is broken. Streamlit's result is logged, with how reliably its server answered:
+since 3 Nov 2026 Community Cloud has been dropping about one request in six to this account's apps.
 """
 
 import sys
@@ -15,15 +18,17 @@ from concurrent.futures import ThreadPoolExecutor
 
 from playwright.sync_api import sync_playwright
 
-URL = "https://mathexaminer-ai-demo.streamlit.app/"
+RENDER_URL = "https://mathexaminer-ai-demo.onrender.com/"
+STREAMLIT_URL = "https://mathexaminer-ai-demo.streamlit.app/"
 WAKE_BUTTON = "Yes, get this app back up!"
 READY_TEXT = "CIE A-Level"  # tagline on the app's login screen
-TIMEOUT_S = 540  # a cold start on Community Cloud can take several minutes; the job limit is 15
+RENDER_TIMEOUT_S = 240  # a Render free instance takes about a minute to wake
+STREAMLIT_TIMEOUT_S = 420  # the job limit is 15 minutes for both visits together
 RELOAD_AFTER_S = 90  # a stalled spinner is reloaded after this long (not while a woken app starts)
 
 
 def app_is_ready(page) -> bool:
-    # The app is served inside an iframe on the streamlit.app page, so look in every frame.
+    # On streamlit.app the app is served inside an iframe, so look in every frame.
     for frame in page.frames:
         try:
             if frame.get_by_text(READY_TEXT).count():
@@ -33,59 +38,70 @@ def app_is_ready(page) -> bool:
     return False
 
 
-HEALTH_URL = URL + "~/+/_stcore/health"
-
-
-def _health_ok(_i: int) -> tuple[bool, float]:
+def _health_ok(url: str) -> tuple[bool, float]:
     start = time.monotonic()
     try:
-        with urllib.request.urlopen(HEALTH_URL, timeout=70) as r:
+        with urllib.request.urlopen(url, timeout=70) as r:
             ok = r.status == 200
     except Exception:
         ok = False
     return ok, time.monotonic() - start
 
 
-def report_server_health(n: int = 30) -> None:
-    """Log how reliably the app's server answers, so a flaky host shows up in the run log."""
+def report_server_health(name: str, health_url: str, n: int = 30) -> None:
+    """Log how reliably a server answers, so a flaky host shows up in the run log."""
     with ThreadPoolExecutor(max_workers=10) as pool:
-        results = list(pool.map(_health_ok, range(n)))
+        results = list(pool.map(_health_ok, [health_url] * n))
     failed = [t for ok, t in results if not ok]
     slowest = max(t for _, t in results)
-    print(f"server health: {n - len(failed)}/{n} answered, slowest {slowest:.1f} s")
+    print(f"{name} server health: {n - len(failed)}/{n} answered, slowest {slowest:.1f} s")
+
+
+def visit(browser, name: str, url: str, timeout_s: int, screenshot: str | None = None) -> bool:
+    page = browser.new_page()
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=120_000)
+    except Exception as exc:
+        print(f"{name}: could not open the page ({exc})")
+        page.close()
+        return False
+    deadline = time.monotonic() + timeout_s
+    loaded_at = time.monotonic()
+    woke = False
+    reloads = 0
+    while time.monotonic() < deadline:
+        if app_is_ready(page):
+            print(f"{name}: demo is up" + (" (it was asleep; woken)" if woke else "")
+                  + (f" after {reloads} reload(s)" if reloads else ""))
+            page.close()
+            return True
+        wake = page.get_by_role("button", name=WAKE_BUTTON)
+        if not woke and wake.count():
+            print(f"{name}: demo was asleep; pressing the wake-up button")
+            wake.first.click()
+            woke = True
+        elif not woke and time.monotonic() - loaded_at > RELOAD_AFTER_S:
+            print(f"{name}: page stalled while loading; reloading")
+            page.reload(wait_until="domcontentloaded", timeout=60_000)
+            loaded_at = time.monotonic()
+            reloads += 1
+        page.wait_for_timeout(5000)
+    print(f"{name}: demo did not show its login screen within {timeout_s} s", file=sys.stderr)
+    if screenshot:
+        page.screenshot(path=screenshot, full_page=True)
+    page.close()
+    return False
 
 
 def main() -> int:
-    report_server_health()
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
-        page = browser.new_page()
-        page.goto(URL, wait_until="domcontentloaded", timeout=120_000)
-        deadline = time.monotonic() + TIMEOUT_S
-        loaded_at = time.monotonic()
-        woke = False
-        reloads = 0
-        while time.monotonic() < deadline:
-            if app_is_ready(page):
-                print("demo is up" + (" (it was asleep; woken)" if woke else "")
-                      + (f" after {reloads} reload(s)" if reloads else ""))
-                browser.close()
-                return 0
-            wake = page.get_by_role("button", name=WAKE_BUTTON)
-            if not woke and wake.count():
-                print("demo was asleep; pressing the wake-up button")
-                wake.first.click()
-                woke = True
-            elif not woke and time.monotonic() - loaded_at > RELOAD_AFTER_S:
-                print("page stalled while loading; reloading")
-                page.reload(wait_until="domcontentloaded", timeout=60_000)
-                loaded_at = time.monotonic()
-                reloads += 1
-            page.wait_for_timeout(5000)
-        print(f"demo did not show its login screen within {TIMEOUT_S} s", file=sys.stderr)
-        page.screenshot(path="demo-failure.png", full_page=True)
+        render_ok = visit(browser, "Render", RENDER_URL, RENDER_TIMEOUT_S, screenshot="demo-failure.png")
+        report_server_health("Render", RENDER_URL + "_stcore/health")
+        report_server_health("Streamlit", STREAMLIT_URL + "~/+/_stcore/health")
+        visit(browser, "Streamlit", STREAMLIT_URL, STREAMLIT_TIMEOUT_S)
         browser.close()
-        return 1
+    return 0 if render_ok else 1
 
 
 if __name__ == "__main__":
