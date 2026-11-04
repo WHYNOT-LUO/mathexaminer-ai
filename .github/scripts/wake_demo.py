@@ -10,6 +10,8 @@ screen never appears, so a broken demo shows up as a failed workflow run.
 
 import sys
 import time
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 
 from playwright.sync_api import sync_playwright
 
@@ -31,7 +33,30 @@ def app_is_ready(page) -> bool:
     return False
 
 
+HEALTH_URL = URL + "~/+/_stcore/health"
+
+
+def _health_ok(_i: int) -> tuple[bool, float]:
+    start = time.monotonic()
+    try:
+        with urllib.request.urlopen(HEALTH_URL, timeout=70) as r:
+            ok = r.status == 200
+    except Exception:
+        ok = False
+    return ok, time.monotonic() - start
+
+
+def report_server_health(n: int = 30) -> None:
+    """Log how reliably the app's server answers, so a flaky host shows up in the run log."""
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        results = list(pool.map(_health_ok, range(n)))
+    failed = [t for ok, t in results if not ok]
+    slowest = max(t for _, t in results)
+    print(f"server health: {n - len(failed)}/{n} answered, slowest {slowest:.1f} s")
+
+
 def main() -> int:
+    report_server_health()
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         page = browser.new_page()
