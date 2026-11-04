@@ -1,0 +1,18 @@
+# Render Blueprint for a second copy of the public demo (render.com, free plan).
+# Render: New > Blueprint > pick this repository > Apply. No secrets are needed: the demo runs on
+# its in-memory backend. Free services sleep after 15 minutes without visitors and take about a
+# minute to wake on the next visit.
+services:
+  - type: web
+    name: mathexaminer-ai-demo
+    runtime: python
+    plan: free
+    buildCommand: pip install -r demo/requirements.txt
+    startCommand: >-
+      streamlit run demo/demo_app.py --server.port $PORT --server.address 0.0.0.0
+      --server.headless true --browser.gatherUsageStats false
+    healthCheckPath: /_stcore/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.4
