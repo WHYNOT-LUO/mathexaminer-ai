@@ -1,4 +1,4 @@
-# Render Blueprint for a second copy of the public demo (render.com, free plan).
+# Render Blueprint for the public demo (render.com, free plan).
 # Render: New > Blueprint > pick this repository > Apply. No secrets are needed: the demo runs on
 # its in-memory backend. Free services sleep after 15 minutes without visitors and take about a
 # minute to wake on the next visit.

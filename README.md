@@ -252,7 +252,6 @@ supabase/schema.sql        Tables, row-level security, storage rules and databas
 demo/                      In-memory backend, so the interface runs with no accounts or keys
   samples/                 The real question, mark scheme, three handwritten answers and their recorded markings
   requirements.txt         Exact library versions for the hosted demo
-  backup_app.py            Second entry point (Community Cloud allows one app per main file)
 render.yaml                Render Blueprint for the hosted demo
 tests/                     pytest suite
 docs/                      Architecture notes, screenshots, the optional Cloudflare relay, the original design sketch
