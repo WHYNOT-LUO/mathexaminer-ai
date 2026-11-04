@@ -416,3 +416,11 @@ def test_student_dispute_reaches_the_teacher_after_switching_accounts(backend):
     assert not at.exception
     assert [t.label for t in at.tabs][1] == f"Review queue ({waiting + 1})"
     assert "I think my last line deserves the A1." in all_markdown(at)
+
+
+def test_hosted_demo_uses_exact_package_versions():
+    # Community Cloud reads demo/requirements.txt; unpinned, a surprise release broke the hosted demo
+    lines = [ln.strip() for ln in (ROOT / "demo" / "requirements.txt").read_text().splitlines()]
+    pins = [ln for ln in lines if ln and not ln.startswith("#")]
+    assert pins and all(re.fullmatch(r"[A-Za-z0-9_.-]+==[\w.]+", p) for p in pins)
+    assert any(p.startswith("streamlit==") for p in pins)
