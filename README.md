@@ -122,16 +122,17 @@ The marking replies themselves are in [`demo/samples/recorded-gradings.json`](de
 ## How it works
 
 ```mermaid
-flowchart LR
-    T[Teacher] -->|uploads mark scheme| SB[(Supabase:<br/>accounts, database,<br/>private files)]
-    S[Student] -->|photos / PDF of working| APP[Streamlit app]
+flowchart TD
+    T["Teacher uploads the mark scheme"] --> SB[("Supabase: accounts,<br/>database, private files")]
+    S["Student uploads photos or a PDF of their working"] --> APP["Streamlit app"]
     SB -->|mark scheme| APP
-    APP -->|mark scheme + work as images| AI[DeepSeek<br/>deepseek-flash]
+    APP -->|mark scheme + work as images| AI["DeepSeek (deepseek-flash)"]
     AI -->|marking as JSON| APP
-    APP -->|checked result| SB
-    APP -->|feedback, score, takeaway| S
-    SB -->|low confidence or disputed| Q[Review queue]
-    Q -->|final mark and comment| T
+    APP -->|checks each mark, adds up the total, saves| C{"Confident it read<br/>the handwriting?"}
+    C -->|yes| F["Feedback, score and key takeaway for the student"]
+    C -->|no| Q["Teacher review queue"]
+    F -->|student disputes a mark| Q
+    Q -->|final mark and comment| F
 ```
 
 1. **Prepare the images.** The student's pages are converted to compact JPEGs (longest side 1600 px). PDFs are rendered page by page.
