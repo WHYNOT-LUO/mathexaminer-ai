@@ -9,6 +9,7 @@ from ..config import BUCKET_SUBMISSIONS
 from ..models import effective_score
 from . import analytics
 from .components import (
+    ai_markdown,
     alert,
     empty_state,
     esc,
@@ -217,7 +218,7 @@ def _review_card(client, s: dict, key_prefix: str = "queue") -> None:
         st.caption("No pages were uploaded with this submission.")
     elif st.toggle("Show student work", value=True, key=f"show_{key}"):
         show_pages(client, BUCKET_SUBMISSIONS, s["student_work_paths"])
-    st.markdown(s["ai_feedback"])
+    st.markdown(ai_markdown(s["ai_feedback"]))
 
     with st.form(f"resolve_{key}"):
         score = st.number_input(

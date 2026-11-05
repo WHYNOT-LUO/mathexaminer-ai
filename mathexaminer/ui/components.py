@@ -47,6 +47,30 @@ def md_text(value: object) -> str:
     return _MD_SPECIAL.sub(r"\\\1", str(value if value is not None else ""))
 
 
+_MATH = re.compile(r"\$\$.*?\$\$|\$[^$\n]+\$", re.DOTALL)
+_ZWSP = "​"  # an invisible break that stops Streamlit from turning text into a link
+
+
+def _defang(text: str) -> str:
+    text = re.sub(r"([\[\]<])", r"\\\1", text)  # [text](url), [text][ref], ![image](url), <autolink>
+    text = re.sub(r"(?i)\b([a-z][a-z0-9+.-]*):(?=//)", "\\1:" + _ZWSP, text)  # https://example.com
+    text = re.sub(r"(?i)\bwww\.", "www" + _ZWSP + ".", text)  # www.example.com
+    return re.sub(r"(?<=[\w.+-])@(?=\w)", _ZWSP + "@", text)  # name@example.com
+
+
+def ai_markdown(text: str) -> str:
+    """The AI's marking, ready for st.markdown: formatting and $maths$ still render, but nothing in it
+    can become a clickable link. The text comes from the AI reading an uploaded photo, so an
+    instruction planted in the photo could otherwise make it write a link. Maths spans are left
+    untouched (Streamlit's KaTeX does not make links)."""
+    out, last = [], 0
+    for match in _MATH.finditer(text or ""):
+        out += [_defang(text[last:match.start()]), match.group()]
+        last = match.end()
+    out.append(_defang((text or "")[last:]))
+    return "".join(out)
+
+
 def inject_css() -> None:
     st.markdown(f"<style>{_CSS.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
     st.markdown('<div class="top-rule"></div>', unsafe_allow_html=True)
@@ -150,7 +174,7 @@ def takeaway_box(text: str, key: str = "takeaway") -> None:
     HTML) and any HTML in model output stays escaped. `key` must be unique on the page."""
     with st.container(key=key):
         st.markdown('<span class="takeaway-label">📌 Key takeaway</span>', unsafe_allow_html=True)
-        st.markdown(text)
+        st.markdown(ai_markdown(text))
 
 
 def override_note(row: dict) -> None:

@@ -160,7 +160,7 @@ def test_key_takeaway_renders_math_and_stays_escaped(backend):
     sid = submit(backend, student, result)
     at = demo_app(backend, student, last_result=as_result_view(sid, result))
     assert not at.exception
-    assert any(m.value == takeaway and not m.proto.allow_html for m in at.markdown)
+    assert any(m.value == components.ai_markdown(takeaway) and not m.proto.allow_html for m in at.markdown)
     assert not any("<img src=x" in m.value for m in at.markdown if m.proto.allow_html)
 
 
@@ -174,8 +174,47 @@ def test_error_book_takeaways_render_math_and_stay_escaped(backend):
         row["key_takeaway"] = takeaway
     at = demo_app(backend, student)
     assert not at.exception
-    assert sum(m.value == takeaway and not m.proto.allow_html for m in at.markdown) == len(mine)
+    shown = components.ai_markdown(takeaway)
+    assert sum(m.value == shown and not m.proto.allow_html for m in at.markdown) == len(mine)
     assert not any("<img src=x" in m.value for m in at.markdown if m.proto.allow_html)
+
+
+LINK_BAIT = (
+    "Correct $[0, 1]$ and $F(1)$. [Click here](https://evil.example) or https://evil.example/x, "
+    "www.evil.example, help@evil.example, <https://evil.example> and [ref][1]\n\n[1]: https://evil.example"
+)
+# Unescaped link syntax and auto-linked text; a backslash-escaped bracket shows as a plain bracket.
+LINK_FORMS = (r"(?<!\\)\]\(", "https://", r"www\.evil", "help@evil", r"(?<!\\)<https", r"(?<!\\)\[ref")
+
+
+def test_ai_markdown_cannot_make_links_but_keeps_maths():
+    shown = components.ai_markdown(LINK_BAIT)
+    for form in LINK_FORMS:
+        assert not re.search(form, shown), form
+    assert "$[0, 1]$" in shown and "$F(1)$" in shown  # maths is left exactly as the AI wrote it
+    assert components.ai_markdown("Differentiate $y = x^3$ to get $3x^2$.") == "Differentiate $y = x^3$ to get $3x^2$."
+
+
+def test_ai_feedback_shows_no_links_anywhere(backend):
+    # An instruction planted in a photo could make the AI write a link; it must never be clickable.
+    base = recorded(backend)
+    bad_mark = dataclasses.replace(base.marks[0], comment=LINK_BAIT)
+    result = dataclasses.replace(base, marks=(bad_mark, *base.marks[1:]), summary=LINK_BAIT, key_takeaway=LINK_BAIT)
+    student = backend.STUDENTS["student-1"]
+    sid = submit(backend, student, result, flag="Please check")
+    backend.flag_submission(None, sid, "Please check")
+    views = [
+        demo_app(backend, student, last_result=as_result_view(sid, result)),  # feedback after grading
+        demo_app(backend, student),  # Error Book
+        demo_app(backend, backend.TEACHER),  # review queue
+    ]
+    for at in views:
+        assert not at.exception
+        ai_text = [m.value for m in at.markdown if "evil" in m.value]
+        assert ai_text, "the AI's text should still be shown"
+        for text in ai_text:
+            for form in LINK_FORMS:
+                assert not re.search(form, text), (form, text[:120])
 
 
 def test_student_can_dispute_a_grade(backend):

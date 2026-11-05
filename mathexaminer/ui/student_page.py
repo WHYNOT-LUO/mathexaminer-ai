@@ -12,6 +12,7 @@ from .. import db, deepseek, images
 from ..config import BUCKET_QUESTIONS, BUCKET_SCHEMES, BUCKET_SUBMISSIONS, LOW_CONFIDENCE_THRESHOLD, Settings
 from ..models import effective_score
 from .components import (
+    ai_markdown,
     alert,
     empty_state,
     format_date,
@@ -169,7 +170,7 @@ def _result_view(client, last: dict) -> None:
     if last["auto_flagged"]:
         alert("info", "The AI was not sure it read your handwriting correctly, so this was sent to your teacher for a check.")
     st.markdown("---")
-    st.markdown(result.to_markdown())
+    st.markdown(ai_markdown(result.to_markdown()))
 
     st.markdown("<br>", unsafe_allow_html=True)
     if last["flagged"]:
@@ -244,4 +245,4 @@ def _error_book_tab(client, profile) -> None:
             override_note(r)
             if r.get("student_work_paths") and st.toggle("Show my work", value=True, key=f"mywork_{r['id']}"):
                 show_pages(client, BUCKET_SUBMISSIONS, r["student_work_paths"])
-            st.markdown(r["ai_feedback"])
+            st.markdown(ai_markdown(r["ai_feedback"]))

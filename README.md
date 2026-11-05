@@ -100,7 +100,7 @@ example data.*
 - **The program does the arithmetic.** The AI returns one entry per mark; the app checks each entry and adds up the total itself.
 - **Access is enforced by the database**, through row-level security, not just hidden in the interface.
 - **Costs are capped:** each student has a grading allowance per 24 hours, and every grading has a time limit.
-- **109 automated tests** run on every push, on Python 3.10 and 3.12.
+- **111 automated tests** run on every push, on Python 3.10 and 3.12.
 
 ### Measured speed and cost
 
@@ -218,7 +218,7 @@ Set these in `.streamlit/secrets.toml` or as environment variables.
 
 ```bash
 pip install -r requirements-dev.txt
-pytest       # 109 tests
+pytest       # 111 tests
 ruff check .
 ```
 
@@ -226,7 +226,7 @@ ruff check .
 |---|---|---|
 | `test_models.py` | 19 | Totals computed from the marks, clamping, unknown topics, bad numbers from the AI |
 | `test_deepseek.py` | 25 | The request sent to DeepSeek, the retry at low effort, time limits, friendly error messages that never contain the API key |
-| `test_app.py` | 32 | The real interface driven with Streamlit's `AppTest`: log in, grading a sample answer (including the low-confidence one going to the teacher), labelled example data, the question sheet, the Error Book, dispute, teacher review and the submissions list, deleting an assignment, attempts to inject HTML or Markdown links, demo isolation; and that every demo marking adds up to its score |
+| `test_app.py` | 34 | The real interface driven with Streamlit's `AppTest`: log in, grading a sample answer (including the low-confidence one going to the teacher), labelled example data, the question sheet, the Error Book, dispute, teacher review and the submissions list, deleting an assignment, attempts to inject HTML or links (in names, titles and the AI's own feedback), demo isolation; and that every demo marking adds up to its score |
 | `test_images.py` | 16 | Rotation, transparency, PDFs, page and size limits, oversized "decompression bomb" images |
 | `test_db.py` | 11 | The grading allowance, server-side saving with flags, closed assignments, question sheets, file clean-up |
 | `test_config.py` | 6 | Missing or invalid settings, and the service key not being the anon key |
@@ -267,7 +267,7 @@ docs/                      Architecture notes, screenshots, the optional Cloudfl
 - **Students cannot download mark schemes.** The server fetches them to grade.
 - **Files are private.** Mark schemes, question sheets and student work are in private storage, never publicly linked. A teacher can open a student's work only if it was submitted to one of that teacher's assignments, and students can open only the question sheets of open assignments.
 - **Secrets stay on the server.** Streamlit runs the Python on the server; keys never reach the browser, and error messages never include them.
-- **Uploaded images are treated as untrusted.** The AI is told to ignore instructions written inside them, and every piece of text shown on screen is escaped.
+- **Uploaded images are treated as untrusted.** The AI is told to ignore instructions written inside them, every piece of text shown on screen is escaped, and nothing the AI writes can become a clickable link.
 
 The full access table is in [docs/architecture.md](docs/architecture.md#access-control).
 
