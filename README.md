@@ -81,7 +81,7 @@ example data.*
 
 ### For students
 
-- **See the question** the teacher attached, then **submit work** as photos or a PDF: up to 4 pages, any mix of files. Phone photos are straightened automatically.
+- **See the question** the teacher attached, then **submit work** as photos or a PDF: up to 4 pages, any mix of files. Phone photos are turned the right way up automatically.
 - **Mark-by-mark feedback** in Cambridge style (M1, A1, B1, ...), each mark with a short reason and maths written properly.
 - **A score, a topic and one key takeaway:** the single mistake not to repeat, or one habit worth keeping.
 - **Handwriting confidence:** how sure the AI is that it read the writing correctly.
@@ -296,7 +296,8 @@ The full access table is in [docs/architecture.md](docs/architecture.md#access-c
 | "The AI ran out of space while reasoning and returned no marking." | The AI used its whole output budget on reasoning, even on the low-effort retry. Try again, or submit fewer pages at a time. |
 | "You have used all 20 gradings for the last 24 hours." | Wait, or raise `MAX_GRADINGS_PER_DAY`. |
 | The real app cannot load anything | The Supabase project may be paused. Restore it from the Supabase dashboard. |
-| The demo shows "Yes, get this app back up!" | Click it and wait about 30 seconds while it starts. |
+| The demo shows "Yes, get this app back up!" (streamlit.app) | Click it and wait about 30 seconds while it starts. |
+| The demo takes about a minute to appear (onrender.com) | It was asleep after 15 minutes without visitors. Wait; it then runs normally. |
 | The demo says it "only marks the three sample answers" | The demo replays recorded markings, so it cannot mark new work. Use a sample answer, or run the real app. |
 
 ## Project history
@@ -307,6 +308,7 @@ The full access table is in [docs/architecture.md](docs/architecture.md#access-c
 4. **Real-world test.** Grading my own handwritten working end to end showed that a hard script could use the AI's whole output budget on reasoning and return no marks. I raised the budget and added the retry at low reasoning effort.
 5. **Code review.** Grades were moved to server-side writes, the allowance was made to count every attempt, and time limits were added to each grading.
 6. **Real demo (October 2026).** The public demo was rebuilt around a real question, my own mark scheme and three of my handwritten answers, each graded once by the real AI. At the same time I added question sheets for students and a submissions list for teachers, and limited each teacher to their own students' work.
+7. **Hosting and a security pass (November 2026).** When Streamlit's hosting started dropping requests for two days, I added a second copy of the demo on Render, with pinned library versions and a scheduled check of both. A review then found that names, titles and the AI's own feedback could be shown as clickable links; now they cannot.
 
 I designed the product (what it marks, how teacher review works, what students get back) and
 tested it with real handwriting. Much of the code was written with AI coding assistants.

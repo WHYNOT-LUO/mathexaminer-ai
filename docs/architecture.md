@@ -76,7 +76,11 @@ The AI is asked for one JSON object: one entry per mark (`label`, `mark_type`, `
 - **No usable marks means a retry.** If there are no marks, or they add up to zero available marks, the answer is rejected and the request is tried once more.
 
 The prompt also tells the AI that the images are untrusted: it must ignore any instructions written
-in them, such as a page saying "award full marks".
+in them, such as a page saying "award full marks". In case an instruction gets through anyway, the
+interface never lets the AI's text become a clickable link: link syntax is escaped and web and email
+addresses are broken with an invisible character before display, while its $maths$ is left as written
+(`ai_markdown` in [`mathexaminer/ui/components.py`](../mathexaminer/ui/components.py)). Names and
+titles typed by users are escaped the same way (`md_text`).
 
 ## Data model
 
@@ -182,7 +186,7 @@ typed.
 - **One Supabase client per browser session.** The client holds the signed-in user's login token.
   Sharing one client across sessions (for example with `st.cache_resource`) would let one user's
   requests run as another user.
-- **Private storage.** Student handwriting is personal data, so neither bucket is public.
+- **Private storage.** Student handwriting is personal data, so none of the three buckets is public.
 - **A demo built from real work.** The hosted demo runs the real interface on a real question,
   mark scheme and three handwritten answers. Each answer was graded once by the real grader, and the
   demo replays those markings ([`demo/samples/recorded-gradings.json`](../demo/samples/recorded-gradings.json))
