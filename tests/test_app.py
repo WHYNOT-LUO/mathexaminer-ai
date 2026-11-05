@@ -237,6 +237,29 @@ def test_user_supplied_titles_cannot_inject_html(backend):
         assert "<img src=x" not in all_markdown(at)
 
 
+def test_user_supplied_names_cannot_become_markdown_links(backend):
+    # Streamlit renders Markdown (links included) in expander labels and plain markdown, so a student
+    # who signs up as "[Click here](https://evil.example)" must not hand the teacher a working link.
+    evil = "[Click here](https://evil.example) **bold**"
+    backend.STORE.assignments[0]["title"] = evil
+    for row in backend.STORE.submissions:
+        row["assignment_title"] = evil
+        row["student_name"] = evil
+    first = backend.STORE.submissions[0]
+    flag_one(backend)
+    backend.resolve_submission(None, backend.STORE.submissions[1]["id"], 0, "ok")
+    at = demo_app(backend, backend.TEACHER)
+    at.toggle(key=f"subs_{first['assignment_id']}").set_value(True).run()
+    student = next(p for p in backend.STUDENTS.values() if p.user_id == first["student_id"])
+    for app in (at, demo_app(backend, student)):
+        assert not app.exception
+        # A raw HTML block (escaped by esc) is not parsed as Markdown, so only plain markdown counts.
+        shown = [e.label for e in app.expander] + [m.value for m in app.markdown if not m.value.startswith("<")]
+        assert any("Click here" in text for text in shown)
+        assert not [t for t in shown if "[Click here](https://evil.example)" in t]
+        assert not any("**bold**" in text for text in shown)
+
+
 def test_demo_sessions_are_isolated_and_labelled(backend):
     at = demo_app(backend, backend.STUDENTS["student-1"])
     assert not at.exception

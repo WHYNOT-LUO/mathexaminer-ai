@@ -15,6 +15,7 @@ from .components import (
     alert,
     empty_state,
     format_date,
+    md_text,
     override_note,
     page_header,
     result_cards,
@@ -235,7 +236,7 @@ def _error_book_tab(client, profile) -> None:
         if picked and r["topic_tag"] not in picked:
             continue
         awarded, total = effective_score(r)
-        label = (f"{r['assignment_title']} · {awarded}/{total} · {r['topic_tag']} · "
+        label = (f"{md_text(r['assignment_title'])} · {awarded}/{total} · {r['topic_tag']} · "
                  f"AI confidence {r['confidence_score']}% · {format_date(r['created_at'])}")
         with st.expander(label):
             if r["key_takeaway"]:

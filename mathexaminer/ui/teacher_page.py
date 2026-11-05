@@ -13,6 +13,7 @@ from .components import (
     empty_state,
     esc,
     format_date,
+    md_text,
     page_header,
     section_label,
     show_pages,
@@ -133,7 +134,7 @@ def _submission_list(client, subs: list[dict]) -> None:
             status = "awaiting review"
         else:
             status = "AI mark"
-        label = (f"{s['student_name']} · {awarded}/{total} · AI confidence {s['confidence_score']}% · {status}"
+        label = (f"{md_text(s['student_name'])} · {awarded}/{total} · AI confidence {s['confidence_score']}% · {status}"
                  f" · {format_date(s['created_at'])}")
         with st.expander(label):
             _review_card(client, {**s, "ai_feedback": feedback.get(s["id"], "")}, key_prefix="all")
@@ -188,7 +189,7 @@ def _review_tab(client, pending: list[dict], submissions: list[dict]) -> None:
         empty_state("✅", "Nothing waiting for review.")
     for s in pending:
         source = "Student flagged" if s["flag_source"] == "student" else "Flagged by AI (low confidence)"
-        label = (f"{s['student_name']} · {s['assignment_title']} · AI {s['score_awarded']}/{s['score_total']}"
+        label = (f"{md_text(s['student_name'])} · {md_text(s['assignment_title'])} · AI {s['score_awarded']}/{s['score_total']}"
                  f" · confidence {s['confidence_score']}% · {source}")
         with st.expander(label):
             _review_card(client, s)
@@ -199,8 +200,8 @@ def _review_tab(client, pending: list[dict], submissions: list[dict]) -> None:
             for s in resolved:
                 awarded, total = effective_score(s)
                 st.markdown(
-                    f"**{esc(s['student_name'])}** · {esc(s['assignment_title'])} · final {awarded}/{total}"
-                    + (f" · _{esc(s['teacher_comment'])}_" if s.get("teacher_comment") else "")
+                    f"**{md_text(s['student_name'])}** · {md_text(s['assignment_title'])} · final {awarded}/{total}"
+                    + (f" · _{md_text(s['teacher_comment'])}_" if s.get("teacher_comment") else "")
                 )
 
 

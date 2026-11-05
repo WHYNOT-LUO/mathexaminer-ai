@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from html import escape
 from pathlib import Path
@@ -33,6 +34,17 @@ def show_pages(client, bucket: str, paths: list[str], max_pages: int = images.MA
 
 def esc(value: object) -> str:
     return escape(str(value if value is not None else ""), quote=True)
+
+
+_MD_SPECIAL = re.compile(r"([\\`*_{}\[\]()<>#+\-.!|~$:])")
+
+
+def md_text(value: object) -> str:
+    """Plain text for a place Streamlit renders as Markdown (expander labels, st.markdown).
+
+    Names and titles are typed by users, so links, emphasis or $maths$ in them must show as typed.
+    """
+    return _MD_SPECIAL.sub(r"\\\1", str(value if value is not None else ""))
 
 
 def inject_css() -> None:
