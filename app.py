@@ -15,7 +15,7 @@ try:
 except ConfigError as exc:
     st.markdown(
         f'<div class="setup-box"><strong>MathExaminer AI is not configured yet.</strong><br>{esc(exc)}<br><br>'
-        "See the <em>Setup</em> section of the README.</div>",
+        "See <em>Run it yourself</em> in the README.</div>",
         unsafe_allow_html=True,
     )
     st.stop()

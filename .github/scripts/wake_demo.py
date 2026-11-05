@@ -8,7 +8,7 @@ spinner, a stalled page is reloaded as a person would.
 
 The run fails only if the Render copy does not show its login screen, so a failed workflow run
 means the main demo is broken. Streamlit's result is logged, with how reliably its server answered:
-since 3 Nov 2026 Community Cloud has been dropping about one request in six to this account's apps.
+on 3-4 Nov 2026 Community Cloud dropped about one request in six to this account's apps.
 """
 
 import sys

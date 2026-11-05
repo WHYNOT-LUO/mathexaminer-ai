@@ -74,7 +74,8 @@ the teacher's decision always overrides the AI's.
 </details>
 
 *Screenshots are from the built-in demo. The handwriting and its marking are real (recorded from the AI);
-the student names are made up.*
+the student names are made up, and the other assignments in the Error Book and analytics are labelled
+example data.*
 
 ## Features
 
@@ -99,7 +100,7 @@ the student names are made up.*
 - **The program does the arithmetic.** The AI returns one entry per mark; the app checks each entry and adds up the total itself.
 - **Access is enforced by the database**, through row-level security, not just hidden in the interface.
 - **Costs are capped:** each student has a grading allowance per 24 hours, and every grading has a time limit.
-- **108 automated tests** run on every push, on Python 3.10 and 3.12.
+- **109 automated tests** run on every push, on Python 3.10 and 3.12.
 
 ### Measured speed and cost
 
@@ -191,9 +192,9 @@ The public demo needs no secrets. It runs in two places:
   [`render.yaml`](render.yaml). The free plan sleeps after 15 minutes without visitors and wakes in
   about a minute.
 - **[Streamlit Community Cloud](https://streamlit.io/cloud):** a new app with `demo/demo_app.py` as the
-  main file. Since 3 November 2026 Community Cloud has been dropping about one request in six to this
-  account's apps (a one-line app fails the same way), so first visits there often stall; the problem
-  is reported to Streamlit.
+  main file. On 3–4 November 2026 Community Cloud dropped about one request in six to this account's
+  apps (a one-line app failed the same way); it recovered on its own, and the scheduled check below
+  logs how reliably it answers, so a repeat would show up.
 
 Both install the exact versions in [`demo/requirements.txt`](demo/requirements.txt), so a new release
 of a library cannot change the demo by surprise. For the real app, deploy `app.py` on Community Cloud
@@ -217,7 +218,7 @@ Set these in `.streamlit/secrets.toml` or as environment variables.
 
 ```bash
 pip install -r requirements-dev.txt
-pytest       # 108 tests
+pytest       # 109 tests
 ruff check .
 ```
 
@@ -225,7 +226,7 @@ ruff check .
 |---|---|---|
 | `test_models.py` | 19 | Totals computed from the marks, clamping, unknown topics, bad numbers from the AI |
 | `test_deepseek.py` | 25 | The request sent to DeepSeek, the retry at low effort, time limits, friendly error messages that never contain the API key |
-| `test_app.py` | 31 | The real interface driven with Streamlit's `AppTest`: log in, grading a sample answer (including the low-confidence one going to the teacher), labelled example data, the question sheet, the Error Book, dispute, teacher review and the submissions list, deleting an assignment, attempts to inject HTML, demo isolation; and that every demo marking adds up to its score |
+| `test_app.py` | 32 | The real interface driven with Streamlit's `AppTest`: log in, grading a sample answer (including the low-confidence one going to the teacher), labelled example data, the question sheet, the Error Book, dispute, teacher review and the submissions list, deleting an assignment, attempts to inject HTML or Markdown links, demo isolation; and that every demo marking adds up to its score |
 | `test_images.py` | 16 | Rotation, transparency, PDFs, page and size limits, oversized "decompression bomb" images |
 | `test_db.py` | 11 | The grading allowance, server-side saving with flags, closed assignments, question sheets, file clean-up |
 | `test_config.py` | 6 | Missing or invalid settings, and the service key not being the anon key |
