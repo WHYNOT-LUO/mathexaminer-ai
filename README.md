@@ -99,7 +99,7 @@ the student names are made up.*
 - **The program does the arithmetic.** The AI returns one entry per mark; the app checks each entry and adds up the total itself.
 - **Access is enforced by the database**, through row-level security, not just hidden in the interface.
 - **Costs are capped:** each student has a grading allowance per 24 hours, and every grading has a time limit.
-- **107 automated tests** run on every push, on Python 3.10 and 3.12.
+- **108 automated tests** run on every push, on Python 3.10 and 3.12.
 
 ### Measured speed and cost
 
@@ -217,7 +217,7 @@ Set these in `.streamlit/secrets.toml` or as environment variables.
 
 ```bash
 pip install -r requirements-dev.txt
-pytest       # 107 tests
+pytest       # 108 tests
 ruff check .
 ```
 
@@ -225,7 +225,7 @@ ruff check .
 |---|---|---|
 | `test_models.py` | 19 | Totals computed from the marks, clamping, unknown topics, bad numbers from the AI |
 | `test_deepseek.py` | 25 | The request sent to DeepSeek, the retry at low effort, time limits, friendly error messages that never contain the API key |
-| `test_app.py` | 30 | The real interface driven with Streamlit's `AppTest`: log in, grading a sample answer (including the low-confidence one going to the teacher), labelled example data, the question sheet, the Error Book, dispute, teacher review and the submissions list, deleting an assignment, attempts to inject HTML, demo isolation; and that every demo marking adds up to its score |
+| `test_app.py` | 31 | The real interface driven with Streamlit's `AppTest`: log in, grading a sample answer (including the low-confidence one going to the teacher), labelled example data, the question sheet, the Error Book, dispute, teacher review and the submissions list, deleting an assignment, attempts to inject HTML, demo isolation; and that every demo marking adds up to its score |
 | `test_images.py` | 16 | Rotation, transparency, PDFs, page and size limits, oversized "decompression bomb" images |
 | `test_db.py` | 11 | The grading allowance, server-side saving with flags, closed assignments, question sheets, file clean-up |
 | `test_config.py` | 6 | Missing or invalid settings, and the service key not being the anon key |
